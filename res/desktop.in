@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Name=${PRODUCT}
+Type=Application
+GenericName=${PRODUCT}
+Comment=Downloader of URLs
+Comment[fr_FR]=Téléchargeur d'URLs
+TryExec=${BIN_ABSOLUTE_PREFIX}/${TARGET}
+Exec=${BIN_ABSOLUTE_PREFIX}/${TARGET}
+Icon=${TARGET}
+Terminal=false
+Hidden=false
+Categories=Network;Qt
+StartupWMClass=${TARGET}
+X-AppInstall-Package=${TARGET}
