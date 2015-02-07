@@ -68,7 +68,7 @@ ENDIF(WITH_PCH)
 IF(UNIX)
   CONFIGURE_FILE("${CMAKE_CURRENT_SOURCE_DIR}/res/desktop.in" "${CMAKE_CURRENT_BINARY_DIR}/share/applications/${TARGET}.desktop")
 
-  INSTALL(FILES res/icon.xpm DESTINATION share/pixmaps RENAME ${TARGET}.png)
+  INSTALL(FILES res/icon.xpm DESTINATION share/pixmaps RENAME ${TARGET}.xpm)
   INSTALL(FILES res/icon16x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME ${TARGET}.png)
   INSTALL(FILES res/icon22x22.png DESTINATION share/icons/hicolor/22x22/apps RENAME ${TARGET}.png)
   INSTALL(FILES res/icon24x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME ${TARGET}.png)
