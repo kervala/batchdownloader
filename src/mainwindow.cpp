@@ -245,7 +245,7 @@ void MainWindow::finish(QNetworkReply *reply)
 			fileInfo.makeAbsolute();
 			fileName = fileInfo.filePath();
 
-			if (!QFile::exists(fileName))
+			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
 				QFile file(fileName);
 
@@ -272,6 +272,11 @@ void MainWindow::finish(QNetworkReply *reply)
 
 		default:
 		qDebug() << "Error:" << statusCode << reply->errorString();
+
+		if (!m_settings.value("StopOnError").toBool())
+		{
+			downloadNextFile();
+		}
 	}
 
 	reply->deleteLater();
