@@ -53,6 +53,7 @@ protected:
 	int maskCount;
 	QString urlFormat;
 	QString refererFormat;
+	QSettings m_settings;
 };
 
 #endif

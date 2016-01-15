@@ -56,40 +56,36 @@ MainWindow::~MainWindow()
 
 bool MainWindow::loadSettings()
 {
-	QSettings settings;
+	urlEdit->setText(m_settings.value("SourceURL").toString());
+	filenameParameterEdit->setText(m_settings.value("FilenameParameter").toString());
+	refererEdit->setText(m_settings.value("RefererURL").toString());
+	userAgentEdit->setText(m_settings.value("UserAgent").toString());
+	folderEdit->setText(m_settings.value("DestinationFolder").toString());
 
-	urlEdit->setText(settings.value("SourceURL").toString());
-	filenameParameterEdit->setText(settings.value("FilenameParameter").toString());
-	refererEdit->setText(settings.value("RefererURL").toString());
-	userAgentEdit->setText(settings.value("UserAgent").toString());
-	folderEdit->setText(settings.value("DestinationFolder").toString());
+	firstSpinBox->setValue(m_settings.value("First").toInt());
+	lastSpinBox->setValue(m_settings.value("Last").toInt());
+	stepSpinBox->setValue(m_settings.value("Step").toInt());
 
-	firstSpinBox->setValue(settings.value("First").toInt());
-	lastSpinBox->setValue(settings.value("Last").toInt());
-	stepSpinBox->setValue(settings.value("Step").toInt());
-
-	skipCheckBox->setChecked(settings.value("SkipExistingFiles").toBool());
-	stopCheckBox->setChecked(settings.value("StopOnError").toBool());
+	skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
+	stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
 
 	return true;
 }
 
 bool MainWindow::saveSettings()
 {
-	QSettings settings;
+	m_settings.setValue("SourceURL", urlEdit->text());
+	m_settings.setValue("FilenameParameter", filenameParameterEdit->text());
+	m_settings.setValue("RefererURL", refererEdit->text());
+	m_settings.setValue("UserAgent", userAgentEdit->text());
+	m_settings.setValue("DestinationFolder", folderEdit->text());
 
-	settings.setValue("SourceURL", urlEdit->text());
-	settings.setValue("FilenameParameter", filenameParameterEdit->text());
-	settings.setValue("RefererURL", refererEdit->text());
-	settings.setValue("UserAgent", userAgentEdit->text());
-	settings.setValue("DestinationFolder", folderEdit->text());
+	m_settings.setValue("First", firstSpinBox->value());
+	m_settings.setValue("Last", lastSpinBox->value());
+	m_settings.setValue("Step", stepSpinBox->value());
 
-	settings.setValue("First", firstSpinBox->value());
-	settings.setValue("Last", lastSpinBox->value());
-	settings.setValue("Step", stepSpinBox->value());
-
-	settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
-	settings.setValue("StopOnError", stopCheckBox->isChecked());
+	m_settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
+	m_settings.setValue("StopOnError", stopCheckBox->isChecked());
 
 	return true;
 }
