@@ -253,32 +253,42 @@ void MainWindow::download()
 	QRegExp maskReg("(#+)");
 	QString mask;
 
-	if (maskReg.indexIn(urlFormat) < 0)
-		return;
-
-	mask = maskReg.cap(1);
-	maskCount = mask.length();
-	urlFormat.replace(mask, "%1");
+	if (maskReg.indexIn(urlFormat) >= 0)
+	{
+		mask = maskReg.cap(1);
+		maskCount = mask.length();
+		urlFormat.replace(mask, "%1");
+	}
 
 	currentFile = 0;
 
 	progress->setMinimum(firstSpinBox->value());
 	progress->setMaximum(lastSpinBox->value());
 
-	downloadNextFile();
+	if (!downloadNextFile())
+	{
+		progress->setRange(0, 1);
+	}
 }
 
 bool MainWindow::downloadNextFile()
 {
 	do
 	{
-		if (currentFile == 0)
-			currentFile = firstSpinBox->value();
+		if ((stepSpinBox->value() == 0) && (lastSpinBox->value() == 0) && (currentFile == 0))
+		{
+			currentFile = 1;
+		}
 		else
-			currentFile += stepSpinBox->value();
+		{
+			if (currentFile == 0)
+				currentFile = firstSpinBox->value();
+			else
+				currentFile += stepSpinBox->value();
 
-		if (currentFile > lastSpinBox->value())
-			return false;
+			if (currentFile > lastSpinBox->value())
+				return false;
+		}
 	}
 	while(!downloadFile());
 
@@ -287,7 +297,16 @@ bool MainWindow::downloadNextFile()
 
 bool MainWindow::downloadFile()
 {
-	QString str = urlFormat.arg(currentFile, maskCount, 10, QChar('0'));
+	QString str;
+	
+	if (maskCount)
+	{
+		str = urlFormat.arg(currentFile, maskCount, 10, QChar('0'));
+	}
+	else
+	{
+		str = urlFormat;
+	}
 
 	fileLabel->setText(str);
 	progress->setValue(currentFile);
@@ -304,7 +323,10 @@ bool MainWindow::downloadFile()
 	{
 		qDebug() << fileName << "doesn't exist";
 
-		downloadNextFile();
+		if (!downloadNextFile())
+		{
+			progress->setRange(0, 1);
+		}
 	}
 	else
 	{
@@ -381,7 +403,10 @@ void MainWindow::finish(QNetworkReply *reply)
 
 					setFileModificationDate(fileName, lastModified);
 
-					downloadNextFile();
+					if (!downloadNextFile())
+					{
+						progress->setRange(0, 1);
+					}
 				}
 				else
 				{
