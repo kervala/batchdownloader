@@ -24,6 +24,128 @@
 
 #include <QtWidgets/QFileDialog>
 
+#ifdef Q_OS_WIN
+ /** Return the offset in 10th of micro sec between the windows base time (
+ *	01-01-1601 0:0:0 UTC) and the unix base time (01-01-1970 0:0:0 UTC).
+ *	This value is used to convert windows system and file time back and
+ *	forth to unix time (aka epoch)
+ */
+quint64 getWindowsToUnixBaseTimeOffset()
+{
+	static bool init = false;
+
+	static quint64 offset = 0;
+
+	if (!init)
+	{
+		// compute the offset to convert windows base time into unix time (aka epoch)
+		// build a WIN32 system time for jan 1, 1970
+		SYSTEMTIME baseTime;
+		baseTime.wYear = 1970;
+		baseTime.wMonth = 1;
+		baseTime.wDayOfWeek = 0;
+		baseTime.wDay = 1;
+		baseTime.wHour = 0;
+		baseTime.wMinute = 0;
+		baseTime.wSecond = 0;
+		baseTime.wMilliseconds = 0;
+
+		FILETIME baseFileTime = { 0,0 };
+		// convert it into a FILETIME value
+		SystemTimeToFileTime(&baseTime, &baseFileTime);
+		offset = baseFileTime.dwLowDateTime | (quint64(baseFileTime.dwHighDateTime) << 32);
+
+		init = true;
+	}
+
+	return offset;
+}
+#endif
+
+static bool setFileModificationDate(const QString &filename, const QDateTime &modTime)
+{
+#if defined (Q_OS_WIN)
+	// Use the WIN32 API to set the file times in UTC
+	wchar_t wFilename[256];
+	int res = filename.toWCharArray(wFilename);
+
+	if (res < filename.size()) return 0;
+
+	wFilename[res] = L'\0';
+
+	// create a file handle (this does not open the file)
+	HANDLE h = CreateFileW(wFilename, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		qDebug() << QString("Can't set modification date on file '%1' (error accessing file)").arg(filename);
+		return false;
+	}
+
+	FILETIME creationFileTime;
+	FILETIME accessFileTime;
+	FILETIME modFileTime;
+
+	// read the current file time
+	if (GetFileTime(h, &creationFileTime, &accessFileTime, &modFileTime) == 0)
+	{
+		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
+		CloseHandle(h);
+		return false;
+	}
+
+	// win32 file times are in 10th of micro sec (100ns resolution), starting at jan 1, 1601
+	// hey Mr Gates, why 1601 ?
+
+	// convert the unix time in ms to a windows file time
+	quint64 t = modTime.toMSecsSinceEpoch();
+	// convert to 10th of microsec
+	t *= 1000;	// microsec
+	t *= 10;	// 10th of micro sec (rez of windows file time is 100ns <=> 1/10 us
+
+				// apply the windows to unix base time offset
+	t += getWindowsToUnixBaseTimeOffset();
+
+	// update the windows modTime structure
+	modFileTime.dwLowDateTime = quint32(t & 0xffffffff);
+	modFileTime.dwHighDateTime = quint32(t >> 32);
+
+	// update the file time on disk
+	BOOL rez = SetFileTime(h, &creationFileTime, &accessFileTime, &modFileTime);
+	if (rez == 0)
+	{
+		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
+
+		CloseHandle(h);
+		return false;
+	}
+
+	// close the handle
+	CloseHandle(h);
+
+	return true;
+
+#else
+	// first, read the current time of the file
+	struct stat buf;
+	int result = stat(fn.c_str(), &buf);
+	if (result != 0)
+		return false;
+
+	// prepare the new time to apply
+	utimbuf tb;
+	tb.actime = buf.st_atime;
+	tb.modtime = modTime;
+	// set eh new time
+	int res = utime(fn.c_str(), &tb);
+	if (res == -1)
+	{
+		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
+	}
+
+	return res != -1;
+#endif
+}
+
 MainWindow::MainWindow():QMainWindow()
 {
 	setupUi(this);
@@ -224,6 +346,7 @@ void MainWindow::downloadProgress(qint64 done, qint64 total)
 void MainWindow::finish(QNetworkReply *reply)
 {
 	int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
 
 	switch (statusCode)
 	{
@@ -255,6 +378,8 @@ void MainWindow::finish(QNetworkReply *reply)
 				{
 					file.write(reply->readAll());
 					file.close();
+
+					setFileModificationDate(fileName, lastModified);
 
 					downloadNextFile();
 				}
