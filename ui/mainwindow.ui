@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>340</width>
-    <height>365</height>
+    <width>352</width>
+    <height>388</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -173,6 +173,23 @@
         </layout>
        </item>
        <item>
+        <widget class="QCheckBox" name="useLastDirectoryCheckBox">
+         <property name="text">
+          <string>Use last directory from URL as local directory</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="replaceUnderscoresBySpacesCheckBox">
+         <property name="text">
+          <string>Replace underscores by spaces</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QCheckBox" name="skipCheckBox">
          <property name="text">
           <string>Skip existing files</string>
@@ -203,7 +220,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>340</width>
+     <width>352</width>
      <height>21</height>
     </rect>
    </property>

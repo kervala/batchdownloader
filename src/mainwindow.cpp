@@ -188,6 +188,8 @@ bool MainWindow::loadSettings()
 	lastSpinBox->setValue(m_settings.value("Last").toInt());
 	stepSpinBox->setValue(m_settings.value("Step").toInt());
 
+	useLastDirectoryCheckBox->setChecked(m_settings.value("UseLastDirectoryFromURL").toBool());
+	replaceUnderscoresBySpacesCheckBox->setChecked(m_settings.value("ReplaceUnderscoresBySpaces").toBool());
 	skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
 	stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
 
@@ -206,10 +208,51 @@ bool MainWindow::saveSettings()
 	m_settings.setValue("Last", lastSpinBox->value());
 	m_settings.setValue("Step", stepSpinBox->value());
 
+	m_settings.setValue("UseLastDirectoryFromURL", useLastDirectoryCheckBox->isChecked());
+	m_settings.setValue("ReplaceUnderscoresBySpaces", replaceUnderscoresBySpacesCheckBox->isChecked());
 	m_settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
 	m_settings.setValue("StopOnError", stopCheckBox->isChecked());
 
 	return true;
+}
+
+QString MainWindow::getLastDirectoryFromUrl(const QString &url)
+{
+	int posEnd = url.lastIndexOf('/');
+
+	if (posEnd > -1)
+	{
+		int posStart = url.lastIndexOf('/', posEnd - 1);
+
+		if (posStart > -1)
+		{
+			return url.mid(posStart + 1, posEnd - posStart - 1);
+		}
+	}
+
+	return "";
+}
+
+QString MainWindow::directoryFromUrl(const QString &url)
+{
+	QString dir = folderEdit->text();
+
+	if (useLastDirectoryCheckBox->isChecked())
+	{
+		QString lastDir = getLastDirectoryFromUrl(url);
+
+		if (!lastDir.isEmpty())
+		{
+			if (replaceUnderscoresBySpacesCheckBox->isChecked())
+			{
+				lastDir.replace("_", " ");
+			}
+
+			dir += "/" + lastDir;
+		}
+	}
+
+	return dir;
 }
 
 QString MainWindow::fileNameFromUrl(const QString &url)
@@ -226,11 +269,7 @@ QString MainWindow::fileNameFromUrl(const QString &url)
 			fileName = paramReg.cap(1);
 	}
 
-	QFileInfo fileInfo(QDir(folderEdit->text()), fileName);
-	fileInfo.makeAbsolute();
-	QString out = fileInfo.filePath();
-	qDebug() << out;
-	return out;
+	return fileName;
 }
 
 void MainWindow::browse()
@@ -309,9 +348,8 @@ bool MainWindow::downloadFile()
 	}
 
 	fileLabel->setText(str);
-	progress->setValue(currentFile);
 
-	QString fileName = fileNameFromUrl(str);
+	QString fileName = directoryFromUrl(str) + "/" + fileNameFromUrl(str);
 
 	// if file already exists
 	if (QFile::exists(fileName))
@@ -327,6 +365,8 @@ bool MainWindow::downloadFile()
 		{
 			progress->setRange(0, 1);
 		}
+
+		progress->setValue(currentFile);
 	}
 	else
 	{
@@ -374,9 +414,14 @@ void MainWindow::finish(QNetworkReply *reply)
 	{
 		case 200:
 		{
-			QString fileName = QFileInfo(reply->url().path()).fileName();
-	
+			QString dir = directoryFromUrl(reply->url().toString());
+
+			// create all intermediate directories
+			QDir().mkpath(dir);
+
 			QString content = reply->rawHeader("Content-Disposition");
+
+			QString fileName;
 
 			if (!content.isEmpty())
 			{
@@ -386,9 +431,9 @@ void MainWindow::finish(QNetworkReply *reply)
 					fileName = content.mid(pos+9);
 			}
 
-			QFileInfo fileInfo(QDir(folderEdit->text()), fileName);
-			fileInfo.makeAbsolute();
-			fileName = fileInfo.filePath();
+			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(reply->url().toString());
+
+			progress->setValue(currentFile);
 
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
