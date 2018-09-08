@@ -1,6 +1,6 @@
 /*
- *  KORPS is a new role-playing system with its tools
- *  Copyright (C) 2007-2009  Cedric OCHS
+ *  BatchDownloader is a tool to download URLs
+ *  Copyright (C) 2013-2018  Cedric OCHS
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
