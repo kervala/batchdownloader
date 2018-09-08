@@ -5,14 +5,19 @@ IF(POLICY CMP0020)
   CMAKE_POLICY(SET CMP0020 NEW)
 ENDIF()
 
-SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules;${CMAKE_MODULE_PATH};$ENV{CMAKE_MODULE_PATH}")
+# Let automoc also process generated files
+IF(POLICY CMP0071)
+  CMAKE_POLICY(SET CMP0071 NEW)
+ENDIF()
 
-INCLUDE(common OPTIONAL)
+# Use AppleClang for OS X compiler
+IF(POLICY CMP0025)
+  CMAKE_POLICY(SET CMP0025 NEW)
+ENDIF()
 
-IF(NOT COMMON_MODULE_FOUND)
-  MESSAGE(FATAL_ERROR "Unable to find common.cmake! Please place it in CMakeModules subdirectory, set CMAKE_MODULE_PATH environement variable or set CMAKE_MODULE_PATH parameter to CMake.")
-ENDIF(NOT COMMON_MODULE_FOUND)
+INCLUDE(UseCMakeModules.cmake)
 
+# Define useful variables
 SET(VERSION_MAJOR 3)
 SET(VERSION_MINOR 0)
 SET(VERSION_PATCH "REVISION")
