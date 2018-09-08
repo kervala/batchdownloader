@@ -39,7 +39,6 @@
 
 	Q_IMPORT_PLUGIN(QSvgPlugin)
 	Q_IMPORT_PLUGIN(QSvgIconPlugin)
-//	Q_IMPORT_PLUGIN(QMngPlugin)
 #endif
 
 #ifdef DEBUG_NEW
@@ -51,8 +50,6 @@ int main(int argc, char *argv[])
 #if defined(_MSC_VER) && defined(_DEBUG)
 	_CrtSetDbgFlag (_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-
-	Q_INIT_RESOURCE(resources);
 
 	QApplication app(argc, argv);
 
@@ -87,14 +84,14 @@ int main(int argc, char *argv[])
 	QTranslator localTranslator;
 	if (localTranslator.load(QString("%1_%2").arg(TARGET).arg(locale), folder))
 	{
-		app.installTranslator(&localTranslator);
+		QCoreApplication::installTranslator(&localTranslator);
 	}
 
 	// take the whole locale
 	QTranslator qtTranslator;
 	if (qtTranslator.load("qt_" + locale, folder))
 	{
-		app.installTranslator(&qtTranslator);
+		QCoreApplication::installTranslator(&qtTranslator);
 	}
 
 	MainWindow mainWindow;
