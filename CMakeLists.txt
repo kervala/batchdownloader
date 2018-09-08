@@ -43,7 +43,7 @@ SET(AUTHOR "Kervala")
 SET(PRODUCT "BatchDownloader")
 SET(DESCRIPTION "Downloader of URLs")
 SET(TARGET "batchdownloader")
-SET(YEAR "2013-2015")
+SET(YEAR "2013-${CURRENT_YEAR}")
 
 PROJECT(${PRODUCT} C CXX)
 
