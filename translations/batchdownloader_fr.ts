@@ -73,7 +73,7 @@
     </message>
     <message>
         <source>Skip existing files</source>
-        <translation>Passer les fichiers existant</translation>
+        <translation>Passer les fichiers existants</translation>
     </message>
     <message>
         <source>Generate</source>
