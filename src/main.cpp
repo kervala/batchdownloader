@@ -64,7 +64,14 @@ int main(int argc, char *argv[])
 	QDir dir(QCoreApplication::applicationDirPath());
 	
 #if defined(Q_OS_WIN32)
+
+#ifdef _DEBUG
+	dir.cdUp();
+	dir.cdUp();
+#endif
+
 	folder = dir.absolutePath();
+
 #else
 	dir.cdUp();
 
