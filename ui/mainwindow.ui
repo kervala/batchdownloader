@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>352</width>
-    <height>388</height>
+    <width>462</width>
+    <height>414</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -105,6 +105,13 @@
            </property>
            <property name="maximum">
             <number>1000</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="detectFromURLButton">
+           <property name="text">
+            <string>Detect from URL</string>
            </property>
           </widget>
          </item>
@@ -220,13 +227,30 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>352</width>
+     <width>462</width>
      <height>21</height>
     </rect>
    </property>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
+ <tabstops>
+  <tabstop>urlEdit</tabstop>
+  <tabstop>filenameParameterEdit</tabstop>
+  <tabstop>firstSpinBox</tabstop>
+  <tabstop>lastSpinBox</tabstop>
+  <tabstop>stepSpinBox</tabstop>
+  <tabstop>detectFromURLButton</tabstop>
+  <tabstop>refererEdit</tabstop>
+  <tabstop>userAgentEdit</tabstop>
+  <tabstop>folderEdit</tabstop>
+  <tabstop>browseButton</tabstop>
+  <tabstop>useLastDirectoryCheckBox</tabstop>
+  <tabstop>replaceUnderscoresBySpacesCheckBox</tabstop>
+  <tabstop>skipCheckBox</tabstop>
+  <tabstop>stopCheckBox</tabstop>
+  <tabstop>downloadButton</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

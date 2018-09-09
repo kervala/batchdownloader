@@ -33,6 +33,7 @@ public:
 	virtual ~MainWindow();
 
 public slots:
+	void onDetectFromURL();
     void browse();
     void download();
 	void finish(QNetworkReply *reply);

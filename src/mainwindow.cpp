@@ -167,6 +167,7 @@ MainWindow::MainWindow():QMainWindow()
 
 	loadSettings();
 
+	connect(detectFromURLButton, SIGNAL(clicked()), this, SLOT(onDetectFromURL()));
 	connect(downloadButton, SIGNAL(clicked()), this, SLOT(download()));
 	connect(browseButton, SIGNAL(clicked()), this, SLOT(browse()));
 	connect(manager, SIGNAL(finished(QNetworkReply*)), SLOT(finish(QNetworkReply*)));
@@ -270,6 +271,42 @@ QString MainWindow::fileNameFromUrl(const QString &url)
 	}
 
 	return fileName;
+}
+
+void MainWindow::onDetectFromURL()
+{
+	QString url = urlEdit->text();
+
+	QRegularExpression reg("([0-9]+)");
+
+	QRegularExpressionMatchIterator i = reg.globalMatch(url);
+
+	int lastNumber = -1;
+	int lastPos = -1;
+	int lastLength = -1;
+
+	while (i.hasNext())
+	{
+		QRegularExpressionMatch match = i.next();
+
+		if (match.hasMatch())
+		{
+			lastNumber = match.captured().toInt();
+			lastPos = match.capturedStart();
+			lastLength = match.capturedLength();
+		}
+	}
+
+	if (lastNumber > -1)
+	{
+		firstSpinBox->setValue(1);
+		lastSpinBox->setValue(lastNumber);
+		stepSpinBox->setValue(1);
+
+		url.replace(lastPos, lastLength, QString('#').repeated(lastLength));
+
+		urlEdit->setText(url);
+	}
 }
 
 void MainWindow::browse()
@@ -438,8 +475,6 @@ void MainWindow::finish(QNetworkReply *reply)
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
 				QFile file(fileName);
-
-				qDebug() << "create" << fileName;
 
 				if (file.open(QIODevice::WriteOnly))
 				{
