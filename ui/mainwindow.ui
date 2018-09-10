@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>462</width>
-    <height>414</height>
+    <height>491</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -211,6 +211,13 @@
         </widget>
        </item>
        <item>
+        <widget class="QTextEdit" name="logsTextEdit">
+         <property name="readOnly">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="downloadButton">
          <property name="text">
           <string>Download</string>
@@ -249,6 +256,7 @@
   <tabstop>replaceUnderscoresBySpacesCheckBox</tabstop>
   <tabstop>skipCheckBox</tabstop>
   <tabstop>stopCheckBox</tabstop>
+  <tabstop>logsTextEdit</tabstop>
   <tabstop>downloadButton</tabstop>
  </tabstops>
  <resources/>

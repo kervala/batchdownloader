@@ -171,7 +171,11 @@ MainWindow::MainWindow():QMainWindow()
 	connect(detectFromURLButton, SIGNAL(clicked()), this, SLOT(onDetectFromURL()));
 	connect(downloadButton, SIGNAL(clicked()), this, SLOT(download()));
 	connect(browseButton, SIGNAL(clicked()), this, SLOT(browse()));
-	connect(manager, SIGNAL(finished(QNetworkReply*)), SLOT(finish(QNetworkReply*)));
+	connect(m_manager, SIGNAL(finished(QNetworkReply*)), SLOT(finish(QNetworkReply*)));
+
+	QTextDocument *doc = new QTextDocument(this);
+	doc->setDefaultStyleSheet(".error { color: #f00; }\n.warning { color: #f80; }\n.info { }\n");
+	logsTextEdit->setDocument(doc);
 }
 
 MainWindow::~MainWindow()
@@ -231,6 +235,8 @@ QString MainWindow::getLastDirectoryFromUrl(const QString &url)
 			return url.mid(posStart + 1, posEnd - posStart - 1);
 		}
 	}
+
+	printWarning(tr("Unable to find a directory in URL %1").arg(url));
 
 	return "";
 }
@@ -300,6 +306,8 @@ void MainWindow::onDetectFromURL()
 
 	if (lastNumber > -1)
 	{
+		printWarning(tr("Detected %1 files in URL %2").arg(lastNumber).arg(url));
+
 		firstSpinBox->setValue(1);
 		lastSpinBox->setValue(lastNumber);
 		stepSpinBox->setValue(1);
@@ -307,6 +315,10 @@ void MainWindow::onDetectFromURL()
 		url.replace(lastPos, lastLength, QString('#').repeated(lastLength));
 
 		urlEdit->setText(url);
+	}
+	else
+	{
+		printWarning(tr("Unable to detect a number in URL %1").arg(url));
 	}
 }
 
@@ -387,7 +399,9 @@ bool MainWindow::downloadFile()
 	QString fileName = directoryFromUrl(str) + "/" + fileNameFromUrl(str);
 
 	// if file already exists
-	if (QFile::exists(fileName))
+	if (m_settings.value("SkipExistingFiles").toBool() && QFile::exists(fileName))
+	{
+		printWarning(tr("File %1 already exists, skip it").arg(fileName));
 		return false;
 
 	bool dontDownload = false;
@@ -481,25 +495,24 @@ void MainWindow::finish(QNetworkReply *reply)
 
 					setFileModificationDate(fileName, lastModified);
 
-					if (!downloadNextFile())
-					{
-						progress->setRange(0, 1);
-					}
+					printInfo(tr("%1 OK").arg(reply->url().toString()));
+
+					downloadNextFile();
 				}
 				else
 				{
-					qCritical() << "Unable to save the file" << fileName;
+					printError(tr("Unable to save the file %1").arg(fileName));
 				}
 			}
 			else
 			{
-				qCritical() << "File" << fileName << "already exists";
+				printWarning(tr("File %1 already exists").arg(fileName));
 			}
 		}
 		break;
 
 		default:
-		qDebug() << "Error:" << statusCode << reply->errorString();
+		printError(tr("Error HTTP %1: %2").arg(statusCode).arg(reply->errorString()));
 
 		if (!m_settings.value("StopOnError").toBool())
 		{
@@ -508,4 +521,26 @@ void MainWindow::finish(QNetworkReply *reply)
 	}
 
 	reply->deleteLater();
+}
+
+void MainWindow::printLog(const QString &style, const QString &str)
+{
+	logsTextEdit->append(QString("<div class='%1'>%2</div>").arg(style).arg(str));
+	logsTextEdit->moveCursor(QTextCursor::End);
+	logsTextEdit->ensureCursorVisible();
+}
+
+void MainWindow::printInfo(const QString &str)
+{
+	printLog("info", str);
+}
+
+void MainWindow::printWarning(const QString &str)
+{
+	printLog("warning", str);
+}
+
+void MainWindow::printError(const QString &str)
+{
+	printLog("error", str);
 }
