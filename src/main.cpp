@@ -91,14 +91,14 @@ int main(int argc, char *argv[])
 	QTranslator localTranslator;
 	if (localTranslator.load(QString("%1_%2").arg(TARGET).arg(locale), folder))
 	{
-		QCoreApplication::installTranslator(&localTranslator);
+		QApplication::installTranslator(&localTranslator);
 	}
 
 	// take the whole locale
 	QTranslator qtTranslator;
 	if (qtTranslator.load("qt_" + locale, folder))
 	{
-		QCoreApplication::installTranslator(&qtTranslator);
+		QApplication::installTranslator(&qtTranslator);
 	}
 
 	MainWindow mainWindow;
