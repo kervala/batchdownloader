@@ -156,14 +156,15 @@ MainWindow::MainWindow():QMainWindow()
 	fileLabel->setMinimumSize(QSize(500, 12));
 	statusbar->addWidget(fileLabel);
 
-	sizeLabel = new QLabel(this);
-	sizeLabel->setMaximumSize(QSize(16777215, 12));
-	statusbar->addPermanentWidget(sizeLabel);
+	m_progressCurrent = new QProgressBar(this);
+	m_progressCurrent->setMaximumSize(QSize(16777215, 12));
+	m_progressCurrent->setMaximum(100);
+	statusbar->addPermanentWidget(m_progressCurrent);
 
-	progress = new QProgressBar(this);
-	progress->setMaximumSize(QSize(16777215, 12));
-	progress->setMaximum(100);
-	statusbar->addPermanentWidget(progress);
+	m_progressTotal = new QProgressBar(this);
+	m_progressTotal->setMaximumSize(QSize(16777215, 12));
+	m_progressTotal->setMaximum(100);
+	statusbar->addPermanentWidget(m_progressTotal);
 
 	loadSettings();
 
@@ -336,15 +337,12 @@ void MainWindow::download()
 		urlFormat.replace(mask, "%1");
 	}
 
-	currentFile = 0;
+	m_currentFile = 0;
 
-	progress->setMinimum(firstSpinBox->value());
-	progress->setMaximum(lastSpinBox->value());
+	m_progressTotal->setMinimum(firstSpinBox->value());
+	m_progressTotal->setMaximum(lastSpinBox->value());
 
-	if (!downloadNextFile())
-	{
-		progress->setRange(0, 1);
-	}
+	downloadNextFile();
 }
 
 bool MainWindow::downloadNextFile()
@@ -439,7 +437,7 @@ bool MainWindow::downloadFile()
 
 void MainWindow::downloadProgress(qint64 done, qint64 total)
 {
-	sizeLabel->setText(QString::number(done));
+	m_progressCurrent->setValue(done * 100 / total);
 }
 
 void MainWindow::finish(QNetworkReply *reply)
@@ -470,7 +468,7 @@ void MainWindow::finish(QNetworkReply *reply)
 
 			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(reply->url().toString());
 
-			progress->setValue(currentFile);
+			m_progressTotal->setValue(m_currentFile);
 
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
