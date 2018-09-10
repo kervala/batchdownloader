@@ -22,7 +22,8 @@
 
 #include "ui_mainwindow.h"
 
-#include <QtWidgets/QProgressBar>
+class QProgressBar;
+class QWinTaskbarButton;
 
 class MainWindow : public QMainWindow, public Ui::MainWindow
 {
@@ -40,6 +41,8 @@ public slots:
 	void downloadProgress(qint64 done, qint64 total);
 
 protected:
+	void showEvent(QShowEvent *e);
+
 	bool downloadFile();
 	bool downloadNextFile();
 
@@ -64,6 +67,8 @@ protected:
 	QString m_urlFormat;
 	QString m_refererFormat;
 	QSettings m_settings;
+
+	QWinTaskbarButton *m_button;
 };
 
 #endif

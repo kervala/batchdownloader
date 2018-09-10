@@ -68,7 +68,7 @@ SETUP_EXTERNAL()
 GEN_CONFIG_H()
 GEN_REVISION_H()
 
-USE_QT_MODULES(Gui Network Svg QT5 Widgets)
+USE_QT_MODULES(Gui Network Svg QT5 Widgets WinExtras)
 FILE(GLOB HEADER src/*.h)
 FILE(GLOB SRC src/*.cpp)
 FILE(GLOB UI ui/*.ui)

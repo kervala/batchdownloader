@@ -24,6 +24,11 @@
 
 #include <QtWidgets/QFileDialog>
 
+#ifdef Q_OS_WIN32
+#include <QtWinExtras/QWinTaskbarProgress>
+#include <QtWinExtras/QWinTaskbarButton>
+#endif
+
 #ifdef Q_OS_WIN
  /** Return the offset in 10th of micro sec between the windows base time (
  *	01-01-1601 0:0:0 UTC) and the unix base time (01-01-1970 0:0:0 UTC).
@@ -150,6 +155,10 @@ MainWindow::MainWindow():QMainWindow()
 {
 	setupUi(this);
 
+#ifdef Q_OS_WIN32
+	m_button = new QWinTaskbarButton(this);
+#endif
+
 	m_manager = new QNetworkAccessManager(this);
 
 	m_fileLabel = new QLabel(this);
@@ -180,6 +189,15 @@ MainWindow::MainWindow():QMainWindow()
 
 MainWindow::~MainWindow()
 {
+}
+
+void MainWindow::showEvent(QShowEvent *e)
+{
+#ifdef Q_OS_WIN32
+	m_button->setWindow(windowHandle());
+#endif
+
+	e->accept();
 }
 
 bool MainWindow::loadSettings()
@@ -471,6 +489,30 @@ void MainWindow::finish(QNetworkReply *reply)
 			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(reply->url().toString());
 
 			m_progressTotal->setValue(m_currentFile);
+
+#ifdef Q_OS_WIN32
+			QWinTaskbarProgress *progress = m_button->progress();
+
+			if (m_currentFile == lastSpinBox->value())
+			{
+				// end
+				progress->hide();
+			}
+			else if (m_currentFile == firstSpinBox->value())
+			{
+				// beginning
+				progress->show();
+				progress->setRange(0, lastSpinBox->value());
+			}
+			else
+			{
+				// progress
+				progress->show();
+				progress->setValue(m_currentFile);
+			}
+#else
+			// TODO: for other OSes
+#endif
 
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
