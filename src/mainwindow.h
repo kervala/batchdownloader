@@ -50,14 +50,19 @@ protected:
 	bool loadSettings();
 	bool saveSettings();
 
-	QProgressBar *progress;
-	QLabel *fileLabel;
-	QLabel *sizeLabel;
-	QNetworkAccessManager *manager;
-	int currentFile;
-	int maskCount;
-	QString urlFormat;
-	QString refererFormat;
+	void printLog(const QString &style, const QString &str);
+	void printInfo(const QString &str);
+	void printWarning(const QString &str);
+	void printError(const QString &str);
+
+	QProgressBar *m_progressCurrent;
+	QProgressBar *m_progressTotal;
+	QLabel *m_fileLabel;
+	QNetworkAccessManager *m_manager;
+	int m_currentFile;
+	int m_maskCount;
+	QString m_urlFormat;
+	QString m_refererFormat;
 	QSettings m_settings;
 };
 

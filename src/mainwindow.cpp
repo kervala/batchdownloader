@@ -150,11 +150,11 @@ MainWindow::MainWindow():QMainWindow()
 {
 	setupUi(this);
 
-	manager = new QNetworkAccessManager(this);
+	m_manager = new QNetworkAccessManager(this);
 
-	fileLabel = new QLabel(this);
-	fileLabel->setMinimumSize(QSize(500, 12));
-	statusbar->addWidget(fileLabel);
+	m_fileLabel = new QLabel(this);
+	m_fileLabel->setMinimumSize(QSize(500, 12));
+	statusbar->addWidget(m_fileLabel);
 
 	m_progressCurrent = new QProgressBar(this);
 	m_progressCurrent->setMaximumSize(QSize(16777215, 12));
@@ -335,18 +335,18 @@ void MainWindow::download()
 {
 	saveSettings();
 
-	urlFormat = urlEdit->text();
-	refererFormat = refererEdit->text();
-	maskCount = 0;
+	m_urlFormat = urlEdit->text();
+	m_refererFormat = refererEdit->text();
+	m_maskCount = 0;
 
 	QRegExp maskReg("(#+)");
 	QString mask;
 
-	if (maskReg.indexIn(urlFormat) >= 0)
+	if (maskReg.indexIn(m_urlFormat) >= 0)
 	{
 		mask = maskReg.cap(1);
-		maskCount = mask.length();
-		urlFormat.replace(mask, "%1");
+		m_maskCount = mask.length();
+		m_urlFormat.replace(mask, "%1");
 	}
 
 	m_currentFile = 0;
@@ -361,18 +361,18 @@ bool MainWindow::downloadNextFile()
 {
 	do
 	{
-		if ((stepSpinBox->value() == 0) && (lastSpinBox->value() == 0) && (currentFile == 0))
+		if ((stepSpinBox->value() == 0) && (lastSpinBox->value() == 0) && (m_currentFile == 0))
 		{
-			currentFile = 1;
+			m_currentFile = 1;
 		}
 		else
 		{
-			if (currentFile == 0)
-				currentFile = firstSpinBox->value();
+			if (m_currentFile == 0)
+				m_currentFile = firstSpinBox->value();
 			else
-				currentFile += stepSpinBox->value();
+				m_currentFile += stepSpinBox->value();
 
-			if (currentFile > lastSpinBox->value())
+			if (m_currentFile > lastSpinBox->value())
 				return false;
 		}
 	}
@@ -385,16 +385,16 @@ bool MainWindow::downloadFile()
 {
 	QString str;
 	
-	if (maskCount)
+	if (m_maskCount)
 	{
-		str = urlFormat.arg(currentFile, maskCount, 10, QChar('0'));
+		str = m_urlFormat.arg(m_currentFile, m_maskCount, 10, QChar('0'));
 	}
 	else
 	{
-		str = urlFormat;
+		str = m_urlFormat;
 	}
 
-	fileLabel->setText(str);
+	m_fileLabel->setText(str);
 
 	QString fileName = directoryFromUrl(str) + "/" + fileNameFromUrl(str);
 
@@ -403,48 +403,36 @@ bool MainWindow::downloadFile()
 	{
 		printWarning(tr("File %1 already exists, skip it").arg(fileName));
 		return false;
-
-	bool dontDownload = false;
-
-	if (dontDownload)
-	{
-		qDebug() << fileName << "doesn't exist";
-
-		if (!downloadNextFile())
-		{
-			progress->setRange(0, 1);
-		}
-
-		progress->setValue(currentFile);
 	}
-	else
+
+	QUrl url(str);
+
+	// if bad url
+	if (!url.isValid() || url.scheme().isEmpty())
 	{
-		QUrl url(str);
-
-		// if bad url
-		if (!url.isValid() || url.scheme().isEmpty())
-			return false;
-
-		QString referer = refererFormat;
-
-		if (refererFormat.indexOf("%1") > -1)
-			referer = referer.arg(currentFile, maskCount, 10, QChar('0'));
-
-		QNetworkRequest request;
-		request.setUrl(url);
-		request.setRawHeader("Referer", referer.toUtf8());
-		request.setRawHeader("User-Agent", userAgentEdit->text().toUtf8());
-
-		QNetworkReply *reply = manager->get(request);
-
-		if (!reply)
-		{
-			qCritical() << "Download failed:" << str;
-			return false;
-		}
-
-		connect(reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
+		printWarning(tr("URL %1 is invalid").arg(str));
+		return false;
 	}
+
+	QString referer = m_refererFormat;
+
+	if (m_refererFormat.indexOf("%1") > -1)
+		referer = referer.arg(m_currentFile, m_maskCount, 10, QChar('0'));
+
+	QNetworkRequest request;
+	request.setUrl(url);
+	request.setRawHeader("Referer", referer.toUtf8());
+	request.setRawHeader("User-Agent", userAgentEdit->text().toUtf8());
+
+	QNetworkReply *reply = m_manager->get(request);
+
+	if (!reply)
+	{
+		printError(tr("Unable to download %1").arg(str));
+		return false;
+	}
+
+	connect(reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
 
 	return true;
 }
