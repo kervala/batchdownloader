@@ -44,7 +44,7 @@ protected:
 	void showEvent(QShowEvent *e);
 
 	bool downloadFile();
-	bool downloadNextFile();
+	void downloadNextFile();
 
 	QString getLastDirectoryFromUrl(const QString &url);
 	QString directoryFromUrl(const QString &url);
@@ -69,6 +69,8 @@ protected:
 	QSettings m_settings;
 
 	QWinTaskbarButton *m_button;
+
+	bool m_downloading;
 };
 
 #endif

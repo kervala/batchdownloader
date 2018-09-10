@@ -151,7 +151,7 @@ static bool setFileModificationDate(const QString &filename, const QDateTime &mo
 #endif
 }
 
-MainWindow::MainWindow():QMainWindow()
+MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 {
 	setupUi(this);
 
@@ -324,7 +324,7 @@ void MainWindow::onDetectFromURL()
 
 	if (lastNumber > -1)
 	{
-		printWarning(tr("Detected %1 files in URL %2").arg(lastNumber).arg(url));
+		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber).arg(url));
 
 		firstSpinBox->setValue(1);
 		lastSpinBox->setValue(lastNumber);
@@ -342,8 +342,7 @@ void MainWindow::onDetectFromURL()
 
 void MainWindow::browse()
 {
-	QString folder = QFileDialog::getExistingDirectory(this, tr("Destination folder"),
-		"", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+	QString folder = QFileDialog::getExistingDirectory(this, tr("Destination folder"), "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
 
 	if (!folder.isEmpty())
 		folderEdit->setText(folder);
@@ -351,6 +350,15 @@ void MainWindow::browse()
 
 void MainWindow::download()
 {
+	if (m_downloading)
+	{
+		m_downloading = false;
+
+		downloadButton->setText(tr("Download"));
+
+		return;
+	}
+
 	saveSettings();
 
 	m_urlFormat = urlEdit->text();
@@ -372,11 +380,17 @@ void MainWindow::download()
 	m_progressTotal->setMinimum(firstSpinBox->value());
 	m_progressTotal->setMaximum(lastSpinBox->value());
 
+	m_downloading = true;
+
+	downloadButton->setText(tr("Stop"));
+
 	downloadNextFile();
 }
 
-bool MainWindow::downloadNextFile()
+void MainWindow::downloadNextFile()
 {
+	if (!m_downloading) return;
+
 	do
 	{
 		if ((stepSpinBox->value() == 0) && (lastSpinBox->value() == 0) && (m_currentFile == 0))
@@ -391,12 +405,16 @@ bool MainWindow::downloadNextFile()
 				m_currentFile += stepSpinBox->value();
 
 			if (m_currentFile > lastSpinBox->value())
-				return false;
+			{
+				m_downloading = false;
+
+				downloadButton->setText(tr("Download"));
+
+				return;
+			}
 		}
 	}
 	while(!downloadFile());
-
-	return true;
 }
 
 bool MainWindow::downloadFile()
@@ -524,8 +542,6 @@ void MainWindow::finish(QNetworkReply *reply)
 					file.close();
 
 					setFileModificationDate(fileName, lastModified);
-
-					printInfo(tr("%1 OK").arg(reply->url().toString()));
 
 					downloadNextFile();
 				}
