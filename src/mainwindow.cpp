@@ -572,6 +572,12 @@ void MainWindow::finish(QNetworkReply *reply)
 		{
 			downloadNextFile();
 		}
+		else
+		{
+			m_downloading = false;
+
+			downloadButton->setText(tr("Download"));
+		}
 	}
 
 	reply->deleteLater();
