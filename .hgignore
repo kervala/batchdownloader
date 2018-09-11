@@ -1,2 +1,4 @@
-build*
-package*
+^build_.+/
+^package_.+/
+^CMakeModules
+^.+.exe

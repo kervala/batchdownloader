@@ -30,7 +30,11 @@
 
 #if defined(Q_OS_WIN32)
 	Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
 	Q_IMPORT_PLUGIN(QWindowsVistaStylePlugin)
+#endif
+
 #elif defined(Q_OS_MAC)
 	Q_IMPORT_PLUGIN(QCocoaIntegrationPlugin)
 #else
@@ -58,7 +62,7 @@ int main(int argc, char *argv[])
 	QApplication::setApplicationVersion(VERSION);
 	QApplication::setWindowIcon(QIcon(":/icons/icon.svg"));
 
-	QString locale = QLocale::system().name().left(2);
+	QLocale locale = QLocale::system();
 
 	QString folder;
 	QDir dir(QCoreApplication::applicationDirPath());
@@ -87,18 +91,18 @@ int main(int argc, char *argv[])
 
 	folder += "/translations";
 
-	// take the whole locale
+	// load application translations
 	QTranslator localTranslator;
-	if (localTranslator.load(QString("%1_%2").arg(TARGET).arg(locale), folder))
+	if (localTranslator.load(locale, TARGET, "_", folder))
 	{
-		QApplication::installTranslator(&localTranslator);
+		QCoreApplication::installTranslator(&localTranslator);
 	}
 
-	// take the whole locale
+	// load Qt default translations
 	QTranslator qtTranslator;
-	if (qtTranslator.load("qt_" + locale, folder))
+	if (qtTranslator.load(locale, "qt", "_", folder))
 	{
-		QApplication::installTranslator(&qtTranslator);
+		QCoreApplication::installTranslator(&qtTranslator);
 	}
 
 	MainWindow mainWindow;
