@@ -27,6 +27,10 @@
 #ifdef Q_OS_WIN32
 #include <QtWinExtras/QWinTaskbarProgress>
 #include <QtWinExtras/QWinTaskbarButton>
+#else
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #ifdef Q_OS_WIN
@@ -130,18 +134,21 @@ static bool setFileModificationDate(const QString &filename, const QDateTime &mo
 	return true;
 
 #else
+	const char *fn = filename.toUtf8().constData();
+
 	// first, read the current time of the file
 	struct stat buf;
-	int result = stat(fn.c_str(), &buf);
+	int result = stat(fn, &buf);
 	if (result != 0)
 		return false;
 
 	// prepare the new time to apply
 	utimbuf tb;
 	tb.actime = buf.st_atime;
-	tb.modtime = modTime;
-	// set eh new time
-	int res = utime(fn.c_str(), &tb);
+	tb.modtime = modTime.toSecsSinceEpoch();
+
+	// set the new time
+	int res = utime(fn, &tb);
 	if (res == -1)
 	{
 		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
@@ -420,7 +427,7 @@ void MainWindow::downloadNextFile()
 bool MainWindow::downloadFile()
 {
 	QString str;
-	
+
 	if (m_maskCount)
 	{
 		str = m_urlFormat.arg(m_currentFile, m_maskCount, 10, QChar('0'));
