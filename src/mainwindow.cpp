@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 #endif
 
 #ifdef Q_OS_WIN
@@ -145,7 +146,7 @@ static bool setFileModificationDate(const QString &filename, const QDateTime &mo
 	// prepare the new time to apply
 	utimbuf tb;
 	tb.actime = buf.st_atime;
-	tb.modtime = modTime.toSecsSinceEpoch();
+	tb.modtime = modTime.toMSecsSinceEpoch() / 1000;
 
 	// set the new time
 	int res = utime(fn, &tb);
