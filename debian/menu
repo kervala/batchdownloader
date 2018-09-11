@@ -1,0 +1,6 @@
+?package(batchdownloader): \
+	needs="x11" \
+	section="Applications/Network/File Transfer" \
+	icon="/usr/share/pixmaps/batchdownloader.xpm" \
+	title="BatchDownloader" \
+	command="/usr/bin/batchdownloader"

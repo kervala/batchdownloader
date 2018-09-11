@@ -1,0 +1,27 @@
+Source: batchdownloader
+Priority: optional
+Maintainer: Cédric OCHS <kervala@gmail.com>
+Build-Depends: debhelper (>= 9), cmake(>= 2.6), qt5-default, libqt5svg5-dev, qttools5-dev-tools, qttools5-dev
+Standards-Version: 3.9.3
+Section: web
+Bugs: http://dev.kervala.net/projects/batchdownloader/issues
+Homepage: http://dev.kervala.net/projects/batchdownloader/
+
+Package: batchdownloader
+Section: web
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Download helper
+ This tool allows to download several URLs with the same format but numbers that increment.
+ .
+ This package contains the application.
+
+Package: batchdownloader-dbg
+Priority: extra
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, mapmaker (= ${binary:Version})
+Description: Download helper
+ This tool allows to download several URLs with the same format but numbers that increment.
+ .
+ This package contains the debug symbols.
