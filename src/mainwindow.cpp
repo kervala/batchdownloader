@@ -334,9 +334,7 @@ void MainWindow::onDetectFromURL()
 	{
 		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber).arg(url));
 
-		firstSpinBox->setValue(1);
 		lastSpinBox->setValue(lastNumber);
-		stepSpinBox->setValue(1);
 
 		url.replace(lastPos, lastLength, QString('#').repeated(lastLength));
 
@@ -383,11 +381,27 @@ void MainWindow::download()
 		m_urlFormat.replace(mask, "%1");
 	}
 
-	m_currentFile = 0;
+	// fix incorrect values
+	if (firstSpinBox->value() < 0) firstSpinBox->setValue(0);
+	if (lastSpinBox->value() < 0) lastSpinBox->setValue(0);
+	if (stepSpinBox->value() < 1) stepSpinBox->setValue(1);
 
-	m_progressTotal->setMinimum(firstSpinBox->value());
-	m_progressTotal->setMaximum(lastSpinBox->value());
+	// invalid file
+	m_currentFile = -1;
 
+	// initialize progress range
+	if (m_maskCount == 0)
+	{
+		m_progressTotal->hide();
+	}
+	else
+	{
+		m_progressTotal->show();
+		m_progressTotal->setMinimum(firstSpinBox->value());
+		m_progressTotal->setMaximum(lastSpinBox->value());
+	}
+
+	// start download
 	m_downloading = true;
 
 	downloadButton->setText(tr("Stop"));
@@ -397,32 +411,73 @@ void MainWindow::download()
 
 void MainWindow::downloadNextFile()
 {
-	if (!m_downloading) return;
-
-	do
+	if (m_downloading)
 	{
-		if ((stepSpinBox->value() == 0) && (lastSpinBox->value() == 0) && (m_currentFile == 0))
+		// only one file to download (no mask)
+		if (m_maskCount == 0)
 		{
-			m_currentFile = 1;
+			if (m_currentFile < 0)
+			{
+				// no need to use step
+				++m_currentFile;
+
+				// error while downloading
+				if (!downloadFile()) return;
+			}
 		}
 		else
 		{
-			if (m_currentFile == 0)
-				m_currentFile = firstSpinBox->value();
-			else
-				m_currentFile += stepSpinBox->value();
+			updateProgress();
 
-			if (m_currentFile > lastSpinBox->value())
+			while(m_currentFile < lastSpinBox->value())
 			{
-				m_downloading = false;
+				if (m_currentFile < 0)
+				{
+					m_currentFile = firstSpinBox->value();
+				}
+				else
+				{
+					m_currentFile += stepSpinBox->value();
+				}
 
-				downloadButton->setText(tr("Download"));
-
-				return;
+				// if succeeded to start download, exit from this method
+				if (downloadFile()) return;
 			}
 		}
 	}
-	while(!downloadFile());
+
+	m_downloading = false;
+
+	downloadButton->setText(tr("Download"));
+}
+
+void MainWindow::updateProgress()
+{
+	m_progressTotal->setValue(m_currentFile);
+
+#ifdef Q_OS_WIN32
+	QWinTaskbarProgress *progress = m_button->progress();
+
+	if (m_currentFile == lastSpinBox->value())
+	{
+		// end
+		progress->hide();
+	}
+	else if (m_currentFile == firstSpinBox->value())
+	{
+		// beginning
+		progress->show();
+		progress->setRange(0, lastSpinBox->value());
+	}
+	else
+	{
+		// progress
+		progress->show();
+		progress->setValue(m_currentFile);
+	}
+#else
+	// TODO: for other OSes
+#endif
 }
 
 bool MainWindow::downloadFile()
@@ -514,32 +569,6 @@ void MainWindow::finish(QNetworkReply *reply)
 
 			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(reply->url().toString());
 
-			m_progressTotal->setValue(m_currentFile);
-
-#ifdef Q_OS_WIN32
-			QWinTaskbarProgress *progress = m_button->progress();
-
-			if (m_currentFile == lastSpinBox->value())
-			{
-				// end
-				progress->hide();
-			}
-			else if (m_currentFile == firstSpinBox->value())
-			{
-				// beginning
-				progress->show();
-				progress->setRange(0, lastSpinBox->value());
-			}
-			else
-			{
-				// progress
-				progress->show();
-				progress->setValue(m_currentFile);
-			}
-#else
-			// TODO: for other OSes
-#endif
-
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
 				QFile file(fileName);
@@ -568,16 +597,12 @@ void MainWindow::finish(QNetworkReply *reply)
 		default:
 		printError(tr("Error HTTP %1: %2").arg(statusCode).arg(reply->errorString()));
 
-		if (!m_settings.value("StopOnError").toBool())
-		{
-			downloadNextFile();
-		}
-		else
+		if (m_settings.value("StopOnError").toBool())
 		{
 			m_downloading = false;
-
-			downloadButton->setText(tr("Download"));
 		}
+
+		downloadNextFile();
 	}
 
 	reply->deleteLater();

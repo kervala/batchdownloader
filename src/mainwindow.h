@@ -57,6 +57,7 @@ protected:
 	void printInfo(const QString &str);
 	void printWarning(const QString &str);
 	void printError(const QString &str);
+	void updateProgress();
 
 	QProgressBar *m_progressCurrent;
 	QProgressBar *m_progressTotal;
