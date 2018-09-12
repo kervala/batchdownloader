@@ -310,6 +310,9 @@ void MainWindow::onDetectFromURL()
 {
 	QString url = urlEdit->text();
 
+	// already detected
+	if (url.indexOf('#') > -1) return;
+
 	QRegularExpression reg("([0-9]+)");
 
 	QRegularExpressionMatchIterator i = reg.globalMatch(url);
