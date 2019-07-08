@@ -221,6 +221,7 @@ bool MainWindow::loadSettings()
 	stepSpinBox->setValue(m_settings.value("Step").toInt());
 
 	useLastDirectoryCheckBox->setChecked(m_settings.value("UseLastDirectoryFromURL").toBool());
+	useBeforeLastDirectoryCheckBox->setChecked(m_settings.value("UseBeforeLastDirectoryFromURL").toBool());
 	replaceUnderscoresBySpacesCheckBox->setChecked(m_settings.value("ReplaceUnderscoresBySpaces").toBool());
 	skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
 	stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
@@ -241,6 +242,7 @@ bool MainWindow::saveSettings()
 	m_settings.setValue("Step", stepSpinBox->value());
 
 	m_settings.setValue("UseLastDirectoryFromURL", useLastDirectoryCheckBox->isChecked());
+	m_settings.setValue("UseBeforeLastDirectoryFromURL", useBeforeLastDirectoryCheckBox->isChecked());
 	m_settings.setValue("ReplaceUnderscoresBySpaces", replaceUnderscoresBySpacesCheckBox->isChecked());
 	m_settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
 	m_settings.setValue("StopOnError", stopCheckBox->isChecked());
