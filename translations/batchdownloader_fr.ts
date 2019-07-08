@@ -111,5 +111,49 @@
         <source>Stop on error</source>
         <translation>Arrêter après une erreur</translation>
     </message>
+    <message>
+        <source>Use before last directory from URL as local directory</source>
+        <translation>Utiliser l&apos;avant-dernier répertoire de l&apos;URL comme répertoire local</translation>
+    </message>
+    <message>
+        <source>Unable to find a directory in URL %1</source>
+        <translation>Impossible de trouver un répertoire dans l&apos;URL %1</translation>
+    </message>
+    <message>
+        <source>Detected %1 files in URL %2</source>
+        <translation>Détection de %1 fichiers dans l&apos;URL %2</translation>
+    </message>
+    <message>
+        <source>Unable to detect a number in URL %1</source>
+        <translation>Impossible de détecter un number dans l&apos;URL %1</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
+        <source>File %1 already exists, skip it</source>
+        <translation>Le fichier %1 existe déjà, on le passe</translation>
+    </message>
+    <message>
+        <source>URL %1 is invalid</source>
+        <translation>L&apos;URL %1 est invalide</translation>
+    </message>
+    <message>
+        <source>Unable to download %1</source>
+        <translation>Impossible de télécharger %1</translation>
+    </message>
+    <message>
+        <source>Unable to save the file %1</source>
+        <translation>Impossible d&apos;enregistrer le fichier %1</translation>
+    </message>
+    <message>
+        <source>File %1 already exists</source>
+        <translation>Le fichier %1 existe déjà</translation>
+    </message>
+    <message>
+        <source>Error HTTP %1: %2</source>
+        <translation>Erreur HTTP %1 : %2</translation>
+    </message>
 </context>
 </TS>
