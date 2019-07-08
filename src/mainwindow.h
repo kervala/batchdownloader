@@ -47,6 +47,7 @@ protected:
 	void downloadNextFile();
 
 	QString getLastDirectoryFromUrl(const QString &url);
+	QString getBeforeLastDirectoryFromUrl(const QString &url);
 	QString directoryFromUrl(const QString &url);
 	QString fileNameFromUrl(const QString &url);
 

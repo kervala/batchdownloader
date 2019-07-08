@@ -190,6 +190,13 @@
         </widget>
        </item>
        <item>
+        <widget class="QCheckBox" name="useBeforeLastDirectoryCheckBox">
+         <property name="text">
+          <string>Use before last directory from URL as local directory</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QCheckBox" name="replaceUnderscoresBySpacesCheckBox">
          <property name="text">
           <string>Replace underscores by spaces</string>

@@ -267,20 +267,47 @@ QString MainWindow::getLastDirectoryFromUrl(const QString &url)
 	return "";
 }
 
+QString MainWindow::getBeforeLastDirectoryFromUrl(const QString &url)
+{
+	int posEnd = url.lastIndexOf('/');
+	
+	posEnd = url.lastIndexOf('/', posEnd - 1);
+
+	if (posEnd > -1)
+	{
+		int posStart = url.lastIndexOf('/', posEnd - 1);
+
+		if (posStart > -1)
+		{
+			return url.mid(posStart + 1, posEnd - posStart - 1);
+		}
+	}
+
+	printWarning(tr("Unable to find a directory in URL %1").arg(url));
+
+	return "";
+}
+
 QString MainWindow::directoryFromUrl(const QString &url)
 {
 	QString dir = folderEdit->text();
+	QString lastDir;
 
 	if (useLastDirectoryCheckBox->isChecked())
 	{
-		QString lastDir = getLastDirectoryFromUrl(url);
+		lastDir = getLastDirectoryFromUrl(url);
+	}
+	else if (useBeforeLastDirectoryCheckBox->isChecked())
+	{
+		lastDir = getBeforeLastDirectoryFromUrl(url);
+	}
 
-		if (!lastDir.isEmpty())
+	if (!lastDir.isEmpty())
+	{
+		if (replaceUnderscoresBySpacesCheckBox->isChecked())
 		{
-			if (replaceUnderscoresBySpacesCheckBox->isChecked())
-			{
-				lastDir.replace("_", " ");
-			}
+			lastDir.replace("_", " ");
+		}
 
 			dir += "/" + lastDir;
 		}
