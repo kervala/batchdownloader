@@ -309,8 +309,7 @@ QString MainWindow::directoryFromUrl(const QString &url)
 			lastDir.replace("_", " ");
 		}
 
-			dir += "/" + lastDir;
-		}
+		dir += "/" + lastDir;
 	}
 
 	return dir;
@@ -321,6 +320,32 @@ QString MainWindow::fileNameFromUrl(const QString &url)
 	int posParameter = -1;
 	QString param = filenameParameterEdit->text();
 	QString fileName = QFileInfo(url).fileName();
+	QString formatFileName = QFileInfo(m_urlFormat).fileName();
+
+	// check if mask is in filename or directory
+	bool staticFilename = fileName == formatFileName;
+
+	if (staticFilename)
+	{
+		int extPos = fileName.lastIndexOf('.');
+
+		QString ext;
+		QString base;
+
+		if (extPos > -1)
+		{
+			ext = fileName.mid(extPos + 1);
+			base = fileName.mid(0, extPos);
+
+			fileName = base + "%1." + ext;
+		}
+		else
+		{
+			fileName = "%1.jpg";
+		}
+
+		fileName = fileName.arg(m_currentFile, m_maskCount, 10, QChar('0'));
+	}
 
 	if (!param.isEmpty())
 	{
