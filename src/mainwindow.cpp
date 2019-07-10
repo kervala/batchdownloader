@@ -360,6 +360,20 @@ QString MainWindow::fileNameFromUrl(const QString &url)
 	return fileName;
 }
 
+struct SNumber
+{
+	SNumber()
+	{
+		number = -1;
+		pos = -1;
+		length = -1;
+	}
+
+	int number;
+	int pos;
+	int length;
+};
+
 void MainWindow::onDetectFromURL()
 {
 	QString url = urlEdit->text();
@@ -371,9 +385,7 @@ void MainWindow::onDetectFromURL()
 
 	QRegularExpressionMatchIterator i = reg.globalMatch(url);
 
-	int lastNumber = -1;
-	int lastPos = -1;
-	int lastLength = -1;
+	QVector<SNumber> numbers;
 
 	while (i.hasNext())
 	{
@@ -381,19 +393,37 @@ void MainWindow::onDetectFromURL()
 
 		if (match.hasMatch())
 		{
-			lastNumber = match.captured().toInt();
-			lastPos = match.capturedStart();
-			lastLength = match.capturedLength();
+			SNumber number;
+
+			number.number = match.captured().toInt();
+			number.pos = match.capturedStart();
+			number.length = match.capturedLength();
+
+			// remove too big or small numbers
+			if (number.number < 1000 && number.number > 1) numbers.push_back(number);
 		}
 	}
 
-	if (lastNumber > -1)
+	if (!numbers.isEmpty())
 	{
-		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber).arg(url));
+		// look for greater length
+		int maxIndex = -1;
 
-		lastSpinBox->setValue(lastNumber);
+		for (int i = 0; i < numbers.size(); ++i)
+		{
+			if (maxIndex < 0 || numbers[i].length > numbers[maxIndex].length)
+			{
+				maxIndex = i;
+			}
+		}
 
-		url.replace(lastPos, lastLength, QString('#').repeated(lastLength));
+		SNumber lastNumber = numbers[maxIndex];
+
+		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber.number).arg(url));
+
+		lastSpinBox->setValue(lastNumber.number);
+
+		url.replace(lastNumber.pos, lastNumber.length, QString('#').repeated(lastNumber.length));
 
 		urlEdit->setText(url);
 	}
