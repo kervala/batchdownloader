@@ -580,6 +580,11 @@ bool MainWindow::downloadFile()
 		str = m_urlFormat;
 	}
 
+	return downloadUrl(str);
+}
+
+bool MainWindow::downloadUrl(const QString& str)
+{
 	m_fileLabel->setText(str);
 
 	QString fileName = directoryFromUrl(str) + "/" + fileNameFromUrl(str);
@@ -610,7 +615,7 @@ bool MainWindow::downloadFile()
 	request.setRawHeader("Referer", referer.toUtf8());
 	request.setRawHeader("User-Agent", userAgentEdit->text().toUtf8());
 
-	QNetworkReply *reply = m_manager->get(request);
+	QNetworkReply* reply = m_manager->get(request);
 
 	if (!reply)
 	{
@@ -625,7 +630,21 @@ bool MainWindow::downloadFile()
 
 void MainWindow::downloadProgress(qint64 done, qint64 total)
 {
-	m_progressCurrent->setValue(done * 100 / total);
+	m_progressCurrent->setValue(total > 0 ? done * 100 / total:0);
+}
+
+QString MainWindow::redirectUrl(const QString& newUrl, const QString& oldUrl) const
+{
+	QString redirectUrl;
+	/*
+	 * Check if the URL is empty and
+	 * that we aren't being fooled into a infinite redirect loop.
+	 * We could also keep track of how many redirects we have been to
+	 * and set a limit to it, but we'll leave that to you.
+	 */
+	if (!newUrl.isEmpty() && newUrl != oldUrl) redirectUrl = newUrl;
+
+	return redirectUrl;
 }
 
 void MainWindow::finish(QNetworkReply *reply)
@@ -633,28 +652,45 @@ void MainWindow::finish(QNetworkReply *reply)
 	int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
 
+	QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
+	QString contentDisposition = reply->header(QNetworkRequest::ContentDispositionHeader).toString();
+	QString contentEncoding = QString::fromLatin1(reply->rawHeader("Content-Encoding"));
+	QNetworkReply::NetworkError error = reply->error();
+	QString url = reply->url().toString();
+	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
+
+	QByteArray data = reply->readAll();
+
+	reply->deleteLater();
+
+	// if data are still compressed (deflate ?), uncompress them
+	if (contentEncoding == "gzip" && !data.isEmpty() && data.at(0) == 0x1f)
+	{
+		// uncompress data
+		//data = Kervala::gUncompress(data);
+		qDebug() << "compressed";
+	}
+
 	switch (statusCode)
 	{
 		case 200:
 		{
-			QString dir = directoryFromUrl(reply->url().toString());
+			QString dir = directoryFromUrl(url);
 
 			// create all intermediate directories
 			QDir().mkpath(dir);
 
-			QString content = reply->rawHeader("Content-Disposition");
-
 			QString fileName;
 
-			if (!content.isEmpty())
+			if (!contentDisposition.isEmpty())
 			{
-				int pos = content.indexOf("filename=");
+				int pos = contentDisposition.indexOf("filename=");
 
 				if (pos > -1)
-					fileName = content.mid(pos+9);
+					fileName = contentDisposition.mid(pos+9);
 			}
 
-			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(reply->url().toString());
+			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(url);
 
 			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
 			{
@@ -662,7 +698,7 @@ void MainWindow::finish(QNetworkReply *reply)
 
 				if (file.open(QIODevice::WriteOnly))
 				{
-					file.write(reply->readAll());
+					file.write(data);
 					file.close();
 
 					setFileModificationDate(fileName, lastModified);
@@ -681,6 +717,32 @@ void MainWindow::finish(QNetworkReply *reply)
 		}
 		break;
 
+		case 301:
+		case 302:
+		case 303:
+		case 305:
+		case 307:
+		case 308:
+		{
+			QString newUrl = redirectUrl(redirection, url);
+
+			// relative URL
+			if (newUrl.left(1) == "/")
+			{
+				QUrl url2(url);
+				newUrl = QString("%1://%2%3").arg(url2.scheme()).arg(url2.host()).arg(newUrl);
+			}
+
+			if (!newUrl.isEmpty())
+			{
+				qDebug() << "redirected from" << url << "to" << newUrl;
+
+				downloadUrl(newUrl);
+			}
+
+			break;
+		}
+
 		default:
 		printError(tr("Error HTTP %1: %2").arg(statusCode).arg(reply->errorString()));
 
@@ -691,8 +753,6 @@ void MainWindow::finish(QNetworkReply *reply)
 
 		downloadNextFile();
 	}
-
-	reply->deleteLater();
 }
 
 void MainWindow::printLog(const QString &style, const QString &str)

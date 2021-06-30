@@ -44,6 +44,7 @@ protected:
 	void showEvent(QShowEvent *e);
 
 	bool downloadFile();
+	bool downloadUrl(const QString &url);
 	void downloadNextFile();
 
 	QString getLastDirectoryFromUrl(const QString &url);
@@ -59,6 +60,8 @@ protected:
 	void printWarning(const QString &str);
 	void printError(const QString &str);
 	void updateProgress();
+
+	QString redirectUrl(const QString& newUrl, const QString& oldUrl) const;
 
 	QProgressBar *m_progressCurrent;
 	QProgressBar *m_progressTotal;
