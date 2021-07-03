@@ -363,7 +363,42 @@ bool MainWindow::loadCSV(const QString& filename)
 		// parse line with data
 		line = file.readLine().trimmed();
 
-		QByteArrayList data = line.split(',');
+		QByteArrayList data;
+
+		bool quoteOpen = false;
+		QByteArray value;
+		
+		for (int i = 0, ilen = line.length(); i < ilen; ++i)
+		{
+			char c = line[i];
+
+			if (c == '"')
+			{
+				if (!quoteOpen)
+				{
+					quoteOpen = true;
+				}
+				else
+				{
+					quoteOpen = false;
+				}
+			}
+			else if (c == ',' && !quoteOpen)
+			{
+				data << value;
+
+				value.clear();
+			}
+			else
+			{
+				value += c;
+			}
+		}
+
+		if (!value.isEmpty())
+		{
+			data << value;
+		}
 
 		if (data.size() != headers.size())
 		{
