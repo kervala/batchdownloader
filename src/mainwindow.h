@@ -25,6 +25,22 @@
 class QProgressBar;
 class QWinTaskbarButton;
 
+struct Batch
+{
+	Batch():first(-1), last(-1), step(-1)
+	{
+	}
+
+	QString url;
+	QString referer;
+	int first;
+	int last;
+	int step;
+	QString directory;
+};
+
+typedef QVector<Batch> Batches;
+
 class MainWindow : public QMainWindow, public Ui::MainWindow
 {
 	Q_OBJECT
@@ -35,13 +51,18 @@ public:
 
 public slots:
 	void onDetectFromURL();
-    void browse();
-    void download();
-	void finish(QNetworkReply *reply);
-	void downloadProgress(qint64 done, qint64 total);
+    void onBrowse();
+    void onDownload();
+	void onFinished(QNetworkReply *reply);
+	void onDownloadProgress(qint64 done, qint64 total);
+	void onExportCSV();
+	void onImportCSV();
+	void onClear();
 
 protected:
 	void showEvent(QShowEvent *e);
+
+	void downloadNextBatch();
 
 	bool downloadFile();
 	bool downloadUrl(const QString &url);
@@ -63,6 +84,12 @@ protected:
 
 	QString redirectUrl(const QString& newUrl, const QString& oldUrl) const;
 
+	bool loadCSV(const QString& file);
+	bool saveCSV(const QString& file) const;
+
+	void saveCurrent();
+	void restoreCurrent();
+
 	QProgressBar *m_progressCurrent;
 	QProgressBar *m_progressTotal;
 	QLabel *m_fileLabel;
@@ -76,6 +103,10 @@ protected:
 	QWinTaskbarButton *m_button;
 
 	bool m_downloading;
+
+	Batches m_batches;
+
+	Batch m_current;
 };
 
 #endif

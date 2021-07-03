@@ -185,14 +185,19 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 
 	loadSettings();
 
-	connect(detectFromURLButton, SIGNAL(clicked()), this, SLOT(onDetectFromURL()));
-	connect(downloadButton, SIGNAL(clicked()), this, SLOT(download()));
-	connect(browseButton, SIGNAL(clicked()), this, SLOT(browse()));
-	connect(m_manager, SIGNAL(finished(QNetworkReply*)), SLOT(finish(QNetworkReply*)));
+	connect(detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
+	connect(downloadButton, &QPushButton::clicked, this, &MainWindow::onDownload);
+	connect(browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
+	connect(m_manager, &QNetworkAccessManager::finished, this, &MainWindow::onFinished);
+	connect(urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
+	connect(urlsExportPushButton, &QPushButton::clicked, this, &MainWindow::onExportCSV);
+	connect(urlsClearPushButton, &QPushButton::clicked, this, &MainWindow::onClear);
 
 	QTextDocument *doc = new QTextDocument(this);
 	doc->setDefaultStyleSheet(".error { color: #f00; }\n.warning { color: #f80; }\n.info { }\n");
 	logsTextEdit->setDocument(doc);
+
+	urlsListView->setModel(new QStringListModel(this));
 }
 
 MainWindow::~MainWindow()
@@ -246,6 +251,185 @@ bool MainWindow::saveSettings()
 	m_settings.setValue("ReplaceUnderscoresBySpaces", replaceUnderscoresBySpacesCheckBox->isChecked());
 	m_settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
 	m_settings.setValue("StopOnError", stopCheckBox->isChecked());
+
+	return true;
+}
+
+void MainWindow::onImportCSV()
+{
+	QString filename = QFileDialog::getOpenFileName(this, tr("CSV file to import"),
+		"", tr("CSV files (*.csv)"));
+
+	if (filename.isEmpty())
+		return;
+
+	if (!loadCSV(filename))
+	{
+		QMessageBox::critical(this, tr("Error"), tr("Unable to load or parse CSV file."));
+	}
+}
+
+void MainWindow::onExportCSV()
+{
+	QString filename = QFileDialog::getSaveFileName(this, tr("CSV file to export"),
+		"", tr("CSV Files (*.csv)"));
+
+	if (filename.isEmpty())
+		return;
+
+	if (!saveCSV(filename))
+	{
+		QMessageBox::critical(this, tr("Error"), tr("Unable to save CSV file."));
+	}
+}
+void MainWindow::onClear()
+{
+	urlsListView->model()->removeRows(0, m_batches.size());
+
+	m_batches.clear();
+}
+
+bool MainWindow::loadCSV(const QString& filename)
+{
+	QFile file(filename);
+
+	if (!file.open(QFile::ReadOnly)) return false;
+
+	// parse first line with headers
+	QByteArray line = file.readLine().trimmed();
+
+	QByteArrayList headers = line.split(',');
+
+	int urlIndex = -1;
+	int refererIndex = -1;
+	int directoryIndex = -1;
+	int firstIndex = -1;
+	int lastIndex = -1;
+	int stepIndex = -1;
+
+	for (int i = 0, ilen = headers.size(); i < ilen; ++i)
+	{
+		auto header = headers[i];
+
+		if (header == "url")
+		{
+			urlIndex = i;
+		}
+		else if (header == "referer")
+		{
+			refererIndex = i;
+		}
+		else if (header == "directory")
+		{
+			directoryIndex = i;
+		}
+		else if (header == "first")
+		{
+			firstIndex = i;
+		}
+		else if (header == "last")
+		{
+			lastIndex = i;
+		}
+		else if (header == "step")
+		{
+			stepIndex = i;
+		}
+		else
+		{
+			qDebug() << "Unknown field" << header;
+
+			return false;
+		}
+	}
+
+	if (urlIndex == -1)
+	{
+		qDebug() << "URL index is required";
+
+		return false;
+	}
+
+	m_batches.clear();
+
+	QStringList urls;
+
+	while (file.canReadLine())
+	{
+		// parse line with data
+		line = file.readLine().trimmed();
+
+		QByteArrayList data = line.split(',');
+
+		if (data.size() != headers.size())
+		{
+			qDebug() << "Wrong fields number";
+
+			return false;
+		}
+
+		Batch batch;
+
+		batch.url = data[urlIndex];
+
+		urls << batch.url;
+
+		if (refererIndex > -1)
+		{
+			batch.referer = data[refererIndex];
+		}
+
+		if (directoryIndex > -1)
+		{
+			batch.directory = data[directoryIndex];
+
+			// remove quotes
+			if (batch.directory.length() > 2 && batch.directory[0] == '"' && batch.directory[batch.directory.length() - 1] == '"')
+			{
+				batch.directory = batch.directory.mid(1, batch.directory.length() - 2);
+			}
+		}
+
+		if (firstIndex > -1)
+		{
+			batch.first = data[firstIndex].toInt();
+		}
+		else
+		{
+			batch.first = 1;
+		}
+
+		if (lastIndex > -1)
+		{
+			batch.last = data[lastIndex].toInt();
+		}
+		else
+		{
+			batch.last = 1;
+		}
+
+		if (stepIndex > -1)
+		{
+			batch.step = data[stepIndex].toInt();
+		}
+		else
+		{
+			batch.step = 1;
+		}
+
+		m_batches << batch;
+	}
+
+	qobject_cast<QStringListModel*>(urlsListView->model())->setStringList(urls);
+
+	return true;
+}
+
+bool MainWindow::saveCSV(const QString& filename) const
+{
+	QFile file(filename);
+
+	if (!file.open(QFile::WriteOnly)) return false;
 
 	return true;
 }
@@ -433,7 +617,7 @@ void MainWindow::onDetectFromURL()
 	}
 }
 
-void MainWindow::browse()
+void MainWindow::onBrowse()
 {
 	QString folder = QFileDialog::getExistingDirectory(this, tr("Destination folder"), "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
 
@@ -441,7 +625,7 @@ void MainWindow::browse()
 		folderEdit->setText(folder);
 }
 
-void MainWindow::download()
+void MainWindow::onDownload()
 {
 	if (m_downloading)
 	{
@@ -449,10 +633,58 @@ void MainWindow::download()
 
 		downloadButton->setText(tr("Download"));
 
+		restoreCurrent();
+
 		return;
 	}
 
 	saveSettings();
+
+	// save settings for later
+	if (!m_batches.isEmpty())
+	{
+		saveCurrent();
+	}
+
+	downloadNextBatch();
+}
+
+void MainWindow::saveCurrent()
+{
+	m_current.directory = folderEdit->text();
+	m_current.url = urlEdit->text();
+	m_current.referer = refererEdit->text();
+	m_current.first = firstSpinBox->value();
+	m_current.last = lastSpinBox->value();
+	m_current.step = stepSpinBox->value();
+}
+
+void MainWindow::restoreCurrent()
+{
+	// restore current batch
+	const Batch& batch = m_current;
+
+	folderEdit->setText(batch.directory);
+	urlEdit->setText(batch.url);
+	refererEdit->setText(batch.referer);
+	firstSpinBox->setValue(batch.first);
+	lastSpinBox->setValue(batch.last);
+	stepSpinBox->setValue(batch.step);
+}
+
+void MainWindow::downloadNextBatch()
+{
+	if (!m_batches.isEmpty())
+	{
+		const Batch &batch = m_batches[0];
+
+		folderEdit->setText(batch.directory);
+		urlEdit->setText(batch.url);
+		refererEdit->setText(batch.referer);
+		firstSpinBox->setValue(batch.first);
+		lastSpinBox->setValue(batch.last);
+		stepSpinBox->setValue(batch.step);
+	}
 
 	m_urlFormat = urlEdit->text();
 	m_refererFormat = refererEdit->text();
@@ -533,9 +765,22 @@ void MainWindow::downloadNextFile()
 		}
 	}
 
-	m_downloading = false;
+	if (m_batches.isEmpty())
+	{
+		m_downloading = false;
 
-	downloadButton->setText(tr("Download"));
+		downloadButton->setText(tr("Download"));
+
+		restoreCurrent();
+
+		return;
+	}
+
+	m_batches.removeFirst();
+
+	urlsListView->model()->removeRow(0);
+
+	downloadNextBatch();
 }
 
 void MainWindow::updateProgress()
@@ -623,12 +868,12 @@ bool MainWindow::downloadUrl(const QString& str)
 		return false;
 	}
 
-	connect(reply, SIGNAL(downloadProgress(qint64, qint64)), this, SLOT(downloadProgress(qint64, qint64)));
+	connect(reply, &QNetworkReply::downloadProgress, this, &MainWindow::onDownloadProgress);
 
 	return true;
 }
 
-void MainWindow::downloadProgress(qint64 done, qint64 total)
+void MainWindow::onDownloadProgress(qint64 done, qint64 total)
 {
 	m_progressCurrent->setValue(total > 0 ? done * 100 / total:0);
 }
@@ -647,7 +892,7 @@ QString MainWindow::redirectUrl(const QString& newUrl, const QString& oldUrl) co
 	return redirectUrl;
 }
 
-void MainWindow::finish(QNetworkReply *reply)
+void MainWindow::onFinished(QNetworkReply *reply)
 {
 	int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
