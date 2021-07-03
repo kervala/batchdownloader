@@ -354,8 +354,12 @@ bool MainWindow::loadCSV(const QString& filename)
 
 	QStringList urls;
 
-	while (file.canReadLine())
+	int rows = 0;
+
+	while (!file.atEnd())
 	{
+		++rows;
+
 		// parse line with data
 		line = file.readLine().trimmed();
 
