@@ -1,17 +1,15 @@
 @echo off
 
-set COMPILER=vc12
-set UNIXDIR=D:\Projects\packaging\unix
+:: To be sure Python and Qt are in PATH
+::set PATH=%PATH%;D:\Tools\Python27;D:\Tools\Python27\Scripts;C:\Prog\Qt\6.0.0\msvc2019_64\bin
+set PATH=%PATH%;D:\Tools\Python27;D:\Tools\Python27\Scripts;C:\Prog\Qt\5.15.2\msvc2019_64\bin
+
 set CURRENTDIR=%cd%
 
-set QTVERSION=5.10.1
-
-cd %UNIXDIR%
-call setenv.bat %COMPILER% amd64
+:: Call VC++ command-line tools
+call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 
 cd %CURRENTDIR%
-
-set QTDIR=%WIN32CROSS_PATH%/%COMPILER%/external/qt-%QTVERSION%-static-64
 
 rmdir /s /q package_x64
 
