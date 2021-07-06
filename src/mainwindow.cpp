@@ -22,6 +22,8 @@
 #include "common.h"
 #include "mainwindow.h"
 
+#include "functions.h"
+
 #include <QtWidgets/QFileDialog>
 
 #ifdef Q_OS_WIN32
@@ -33,131 +35,6 @@
 #include <unistd.h>
 #include <utime.h>
 #endif
-
-#ifdef Q_OS_WIN
- /** Return the offset in 10th of micro sec between the windows base time (
- *	01-01-1601 0:0:0 UTC) and the unix base time (01-01-1970 0:0:0 UTC).
- *	This value is used to convert windows system and file time back and
- *	forth to unix time (aka epoch)
- */
-quint64 getWindowsToUnixBaseTimeOffset()
-{
-	static bool init = false;
-
-	static quint64 offset = 0;
-
-	if (!init)
-	{
-		// compute the offset to convert windows base time into unix time (aka epoch)
-		// build a WIN32 system time for jan 1, 1970
-		SYSTEMTIME baseTime;
-		baseTime.wYear = 1970;
-		baseTime.wMonth = 1;
-		baseTime.wDayOfWeek = 0;
-		baseTime.wDay = 1;
-		baseTime.wHour = 0;
-		baseTime.wMinute = 0;
-		baseTime.wSecond = 0;
-		baseTime.wMilliseconds = 0;
-
-		FILETIME baseFileTime = { 0,0 };
-		// convert it into a FILETIME value
-		SystemTimeToFileTime(&baseTime, &baseFileTime);
-		offset = baseFileTime.dwLowDateTime | (quint64(baseFileTime.dwHighDateTime) << 32);
-
-		init = true;
-	}
-
-	return offset;
-}
-#endif
-
-static bool setFileModificationDate(const QString &filename, const QDateTime &modTime)
-{
-#if defined (Q_OS_WIN)
-	// Use the WIN32 API to set the file times in UTC
-	wchar_t wFilename[256];
-	int res = filename.toWCharArray(wFilename);
-
-	if (res < filename.size()) return 0;
-
-	wFilename[res] = L'\0';
-
-	// create a file handle (this does not open the file)
-	HANDLE h = CreateFileW(wFilename, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
-	if (h == INVALID_HANDLE_VALUE)
-	{
-		qDebug() << QString("Can't set modification date on file '%1' (error accessing file)").arg(filename);
-		return false;
-	}
-
-	FILETIME creationFileTime;
-	FILETIME accessFileTime;
-	FILETIME modFileTime;
-
-	// read the current file time
-	if (GetFileTime(h, &creationFileTime, &accessFileTime, &modFileTime) == 0)
-	{
-		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
-		CloseHandle(h);
-		return false;
-	}
-
-	// win32 file times are in 10th of micro sec (100ns resolution), starting at jan 1, 1601
-	// hey Mr Gates, why 1601 ?
-
-	// convert the unix time in ms to a windows file time
-	quint64 t = modTime.toMSecsSinceEpoch();
-	// convert to 10th of microsec
-	t *= 1000;	// microsec
-	t *= 10;	// 10th of micro sec (rez of windows file time is 100ns <=> 1/10 us
-
-				// apply the windows to unix base time offset
-	t += getWindowsToUnixBaseTimeOffset();
-
-	// update the windows modTime structure
-	modFileTime.dwLowDateTime = quint32(t & 0xffffffff);
-	modFileTime.dwHighDateTime = quint32(t >> 32);
-
-	// update the file time on disk
-	BOOL rez = SetFileTime(h, &creationFileTime, &accessFileTime, &modFileTime);
-	if (rez == 0)
-	{
-		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
-
-		CloseHandle(h);
-		return false;
-	}
-
-	// close the handle
-	CloseHandle(h);
-
-	return true;
-
-#else
-	const char *fn = filename.toUtf8().constData();
-
-	// first, read the current time of the file
-	struct stat buf;
-	int result = stat(fn, &buf);
-	if (result != 0)
-		return false;
-
-	// prepare the new time to apply
-	utimbuf tb;
-	tb.actime = buf.st_atime;
-	tb.modtime = modTime.toMSecsSinceEpoch() / 1000;
-
-	// set the new time
-	int res = utime(fn, &tb);
-	if (res == -1)
-	{
-		qDebug() << QString("Can't set modification date on file '%1'").arg(filename);
-	}
-
-	return res != -1;
-#endif
-}
 
 MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 {
@@ -804,6 +681,8 @@ void MainWindow::downloadNextFile()
 		}
 	}
 
+	if (m_current.url.isEmpty()) return;
+
 	if (m_batches.isEmpty())
 	{
 		m_downloading = false;
@@ -946,7 +825,28 @@ void MainWindow::onFinished(QNetworkReply *reply)
 	QByteArray data = reply->readAll();
 
 	reply->deleteLater();
+/*
+	nlwarning("Download finished with HTTP status code %d when downloading %s", status, Q2C(url));
 
+	closeFile();
+
+	if (QFileInfo(m_fullPath).size() == m_size)
+	{
+		bool ok = NLMISC::CFile::setFileModificationDate(m_fullPath.toUtf8().constData(), m_lastModified.toTime_t());
+
+		if (m_listener) m_listener->operationSuccess(m_size);
+
+		emit downloadDone();
+	}
+	else if (status >= 200 && status < 300)
+	{
+		if (m_listener) m_listener->operationContinue();
+	}
+	else
+	{
+		if (m_listener) m_listener->operationFail(tr("HTTP error: %1").arg(status));
+	}
+*/
 	// if data are still compressed (deflate ?), uncompress them
 	if (contentEncoding == "gzip" && !data.isEmpty() && data.at(0) == 0x1f)
 	{
@@ -1060,3 +960,325 @@ void MainWindow::printError(const QString &str)
 {
 	printLog("error", str);
 }
+/*
+bool CDownloader::prepareFile(const QString& url, const QString& fullPath)
+{
+	if (url.isEmpty()) return false;
+
+	m_downloadAfterHead = false;
+
+	if (m_listener) m_listener->operationPrepare();
+
+	m_fullPath = fullPath;
+	m_url = url;
+
+	getFileHead();
+
+	return true;
+}
+
+bool CDownloader::getFile()
+{
+	if (m_fullPath.isEmpty() || m_url.isEmpty())
+	{
+		nlwarning("You forget to call prepareFile before");
+
+		return false;
+	}
+
+	m_downloadAfterHead = true;
+
+	getFileHead();
+
+	return true;
+}
+
+bool CDownloader::openFile()
+{
+	closeFile();
+
+	m_file = new QFile(m_fullPath);
+
+	if (m_file->open(QFile::Append)) return true;
+
+	closeFile();
+
+	return false;
+}
+
+void CDownloader::closeFile()
+{
+	if (m_file)
+	{
+		m_file->close();
+
+		delete m_file;
+		m_file = NULL;
+	}
+}
+
+void CDownloader::getFileHead()
+{
+	if (m_supportsAcceptRanges)
+	{
+		QFileInfo fileInfo(m_fullPath);
+
+		if (fileInfo.exists())
+		{
+			m_offset = fileInfo.size();
+		}
+		else
+		{
+			m_offset = 0;
+		}
+
+		// continue if offset less than size
+		if (m_offset >= m_size)
+		{
+			if (checkDownloadedFile())
+			{
+				// file is already downloaded
+				if (m_listener) m_listener->operationSuccess(m_size);
+
+				emit downloadDone();
+			}
+			else
+			{
+				// or has wrong size
+				if (m_listener) m_listener->operationFail(tr("File is larger (%1B) than expected (%2B)").arg(m_offset).arg(m_size));
+			}
+
+			return;
+		}
+	}
+
+	QNetworkRequest request(m_url);
+	request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:24.0) Gecko/20100101 Firefox/24.0");
+
+	if (m_supportsAcceptRanges)
+	{
+		request.setRawHeader("Range", QString("bytes=%1-").arg(m_offset).toLatin1());
+	}
+
+	QNetworkReply* reply = m_manager->head(request);
+
+	connect(reply, SIGNAL(finished()), SLOT(onHeadFinished()));
+	connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), SLOT(onError(QNetworkReply::NetworkError)));
+
+	startTimer();
+}
+
+void CDownloader::downloadFile()
+{
+	bool ignoreFreeDiskSpaceChecks = CConfigFile::getInstance()->ignoreFreeDiskSpaceChecks();
+	qint64 freeSpace = NLMISC::CSystemInfo::availableHDSpace(m_fullPath.toUtf8().constData());
+
+	if (!ignoreFreeDiskSpaceChecks && freeSpace == 0)
+	{
+		if (m_listener)
+		{
+			QString error = qFromUtf8(NLMISC::formatErrorMessage(NLMISC::getLastError()));
+			m_listener->operationFail(tr("Error '%1' occurred when trying to check free disk space on %2.").arg(error).arg(m_fullPath));
+		}
+		return;
+	}
+
+	if (!ignoreFreeDiskSpaceChecks && freeSpace < m_size - m_offset)
+	{
+		// we have not enough free disk space to continue download
+		if (m_listener) m_listener->operationFail(tr("You only have %1 bytes left on the device, but %2 bytes are needed.").arg(freeSpace).arg(m_size - m_offset));
+		return;
+	}
+
+	if (!openFile())
+	{
+		if (m_listener) m_listener->operationFail(tr("Unable to write file"));
+		return;
+	}
+
+	QNetworkRequest request(m_url);
+	request.setHeader(QNetworkRequest::UserAgentHeader, "Opera/9.80 (Windows NT 6.2; Win64; x64) Presto/2.12.388 Version/12.17");
+
+	if (supportsResume())
+	{
+		request.setRawHeader("Range", QString("bytes=%1-%2").arg(m_offset).arg(m_size - 1).toLatin1());
+	}
+
+	QNetworkReply* reply = m_manager->get(request);
+
+	connect(reply, SIGNAL(finished()), SLOT(onDownloadFinished()));
+	connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), SLOT(onError(QNetworkReply::NetworkError)));
+	connect(reply, SIGNAL(downloadProgress(qint64, qint64)), SLOT(onDownloadProgress(qint64, qint64)));
+	connect(reply, SIGNAL(readyRead()), SLOT(onDownloadRead()));
+
+	if (m_listener) m_listener->operationStart();
+
+	startTimer();
+}
+
+bool CDownloader::checkDownloadedFile()
+{
+	QFileInfo file(m_fullPath);
+
+	return file.size() == m_size && file.lastModified().toUTC() == m_lastModified;
+}
+
+void CDownloader::onHeadFinished()
+{
+	stopTimer();
+
+	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+	int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+	QString url = reply->url().toString();
+
+	QString redirection = reply->header(QNetworkRequest::LocationHeader).toString();
+
+	m_size = reply->header(QNetworkRequest::ContentLengthHeader).toInt();
+	m_lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime().toUTC();
+
+	QString acceptRanges = QString::fromLatin1(reply->rawHeader("Accept-Ranges"));
+	QString contentRange = QString::fromLatin1(reply->rawHeader("Content-Range"));
+
+	reply->deleteLater();
+
+	nlinfo("HTTP status code %d on HEAD for %s", status, Q2C(url));
+
+	if (!redirection.isEmpty())
+	{
+		nlinfo("Redirected to %s", Q2C(redirection));
+	}
+
+	// redirection
+	if (status >= 300 && status < 400)
+	{
+		if (redirection.isEmpty())
+		{
+			nlwarning("No redirection defined");
+
+			if (m_listener) m_listener->operationFail(tr("Redirection URL is not defined"));
+			return;
+		}
+
+		// redirection on another server, recheck resume
+		m_supportsAcceptRanges = false;
+		m_supportsContentRange = false;
+
+		m_referer = m_url;
+
+		// update real URL
+		m_url = redirection;
+
+		getFileHead();
+
+		return;
+	}
+
+	// we requested without range
+	else if (status == 200)
+	{
+		// update size
+		if (m_listener) m_listener->operationInit(0, m_size);
+
+		if (!m_supportsAcceptRanges && acceptRanges == "bytes")
+		{
+			nlinfo("Server supports resume for %s", Q2C(url));
+
+			// server supports resume, part 1
+			m_supportsAcceptRanges = true;
+
+			// request range
+			getFileHead();
+			return;
+		}
+
+		// server doesn't support resume or
+		// we requested range, but server always returns 200
+		// download from the beginning
+		nlwarning("Server doesn't support resume, download %s from the beginning", Q2C(url));
+	}
+
+	// we requested with a range
+	else if (status == 206)
+	{
+		// server supports resume
+		QRegExp regexp("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
+
+		if (m_supportsAcceptRanges && regexp.exactMatch(contentRange))
+		{
+			m_supportsContentRange = true;
+			m_offset = regexp.cap(1).toLongLong();
+
+			// when resuming, Content-Length is the size of missing parts to download
+			m_size = regexp.cap(3).toLongLong();
+
+			// update offset and size
+			if (m_listener) m_listener->operationInit(m_offset, m_size);
+
+			nlinfo("Server supports resume for %s: offset %" NL_I64 "d, size %" NL_I64 "d", Q2C(url), m_offset, m_size);
+		}
+		else
+		{
+			nlwarning("Unable to parse %s", Q2C(contentRange));
+		}
+	}
+
+	// other status
+	else
+	{
+		if (m_listener) m_listener->operationFail(tr("Incorrect status code: %1").arg(status));
+		return;
+	}
+
+	if (m_downloadAfterHead)
+	{
+		if (checkDownloadedFile())
+		{
+			nlwarning("Same date and size");
+		}
+		else
+		{
+			downloadFile();
+		}
+	}
+	else
+	{
+		emit downloadPrepared();
+	}
+}
+
+void CDownloader::onError(QNetworkReply::NetworkError error)
+{
+	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+	nlwarning("Network error %s (%d) when downloading %s", Q2C(reply->errorString()), error, Q2C(m_url));
+
+	if (!m_listener) return;
+
+	if (error == QNetworkReply::OperationCanceledError)
+	{
+		m_listener->operationStop();
+	}
+}
+
+void CDownloader::onDownloadProgress(qint64 current, qint64 total)
+{
+	stopTimer();
+
+	if (!m_listener) return;
+
+	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+	m_listener->operationProgress(m_offset + current, m_url);
+
+	// abort download
+	if (m_listener->operationShouldStop() && reply) reply->abort();
+}
+
+void CDownloader::onDownloadRead()
+{
+	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+
+	if (m_file && reply) m_file->write(reply->readAll());
+}
+*/
