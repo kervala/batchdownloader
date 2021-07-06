@@ -23,17 +23,13 @@
 #include "mainwindow.h"
 
 #include "functions.h"
+#include "downloadmanager.h"
 
 #include <QtWidgets/QFileDialog>
 
 #ifdef Q_OS_WIN32
 #include <QtWinExtras/QWinTaskbarProgress>
 #include <QtWinExtras/QWinTaskbarButton>
-#else
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <utime.h>
 #endif
 
 MainWindow::MainWindow():QMainWindow(), m_downloading(false)
@@ -44,7 +40,19 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 	m_button = new QWinTaskbarButton(this);
 #endif
 
-	m_manager = new QNetworkAccessManager(this);
+	m_manager = new DownloadManager(this);
+
+	connect(m_manager, &DownloadManager::downloadFinished, this, &MainWindow::onFinished);
+	connect(m_manager, &DownloadManager::downloadProgress, this, &MainWindow::onDownloadProgress);
+	connect(m_manager, &DownloadManager::downloadFailed, this, &MainWindow::onDownloadFailed);
+
+
+/*
+	void downloadStarted(const DownloadEntry & entry);
+	void downloadSucceeded(const QByteArray & data, const QDateTime & lastModified, const DownloadEntry & entry);
+	void downloadRedirected(const QString & url, const QDateTime & lastModified, const DownloadEntry & entry);
+	void downloadSaved(const DownloadEntry & entry);
+*/
 
 	m_fileLabel = new QLabel(this);
 	m_fileLabel->setMinimumSize(QSize(500, 12));
@@ -65,7 +73,6 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 	connect(detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
 	connect(downloadButton, &QPushButton::clicked, this, &MainWindow::onDownload);
 	connect(browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
-	connect(m_manager, &QNetworkAccessManager::finished, this, &MainWindow::onFinished);
 	connect(urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
 	connect(urlsExportPushButton, &QPushButton::clicked, this, &MainWindow::onExportCSV);
 	connect(urlsClearPushButton, &QPushButton::clicked, this, &MainWindow::onClear);
@@ -306,32 +313,9 @@ bool MainWindow::loadCSV(const QString& filename)
 			}
 		}
 
-		if (firstIndex > -1)
-		{
-			batch.first = data[firstIndex].toInt();
-		}
-		else
-		{
-			batch.first = 1;
-		}
-
-		if (lastIndex > -1)
-		{
-			batch.last = data[lastIndex].toInt();
-		}
-		else
-		{
-			batch.last = 1;
-		}
-
-		if (stepIndex > -1)
-		{
-			batch.step = data[stepIndex].toInt();
-		}
-		else
-		{
-			batch.step = 1;
-		}
+		batch.first = firstIndex > -1 ? data[firstIndex].toInt() : 1;
+		batch.last = lastIndex > -1 ? data[lastIndex].toInt() : 1;
+		batch.step = stepIndex > -1 ? data[stepIndex].toInt() : 1;
 
 		m_batches << batch;
 	}
@@ -417,7 +401,7 @@ QString MainWindow::directoryFromUrl(const QString &url)
 	return dir;
 }
 
-QString MainWindow::fileNameFromUrl(const QString &url)
+QString MainWindow::fileNameFromUrl(const QString &url, int currentFile)
 {
 	int posParameter = -1;
 	QString param = filenameParameterEdit->text();
@@ -446,7 +430,7 @@ QString MainWindow::fileNameFromUrl(const QString &url)
 			fileName = "%1.jpg";
 		}
 
-		fileName = fileName.arg(m_currentFile, m_maskCount, 10, QChar('0'));
+		fileName = fileName.arg(currentFile, m_maskCount, 10, QChar('0'));
 	}
 
 	if (!param.isEmpty())
@@ -547,9 +531,7 @@ void MainWindow::onDownload()
 	{
 		m_downloading = false;
 
-		downloadButton->setText(tr("Download"));
-
-		restoreCurrent();
+		m_manager->stop();
 
 		return;
 	}
@@ -561,6 +543,10 @@ void MainWindow::onDownload()
 	{
 		saveCurrent();
 	}
+
+	// update manager settings before to call it
+	m_manager->setStopOnError(m_settings.value("StopOnError").toBool());
+	m_manager->setUserAgent(m_settings.value("UserAgent").toString());
 
 	downloadNextBatch();
 }
@@ -621,9 +607,6 @@ void MainWindow::downloadNextBatch()
 	if (lastSpinBox->value() < 0) lastSpinBox->setValue(0);
 	if (stepSpinBox->value() < 1) stepSpinBox->setValue(1);
 
-	// invalid file
-	m_currentFile = -1;
-
 	// initialize progress range
 	if (m_maskCount == 0)
 	{
@@ -641,47 +624,61 @@ void MainWindow::downloadNextBatch()
 
 	downloadButton->setText(tr("Stop"));
 
-	downloadNextFile();
-}
+	// m_fileLabel->setText(str);
 
-void MainWindow::downloadNextFile()
-{
-	if (m_downloading)
+	QString url = m_urlFormat;
+
+	for (int i = firstSpinBox->value(); i <= lastSpinBox->value(); i += stepSpinBox->value())
 	{
-		// only one file to download (no mask)
-		if (m_maskCount == 0)
+		if (m_maskCount > 0)
 		{
-			if (m_currentFile < 0)
-			{
-				// no need to use step
-				++m_currentFile;
-
-				// error while downloading
-				if (!downloadFile()) return;
-			}
+			url = m_urlFormat.arg(i, m_maskCount, 10, QChar('0'));
 		}
-		else
+
+		QString directory = directoryFromUrl(url);
+
+		// create all intermediate directories
+		QDir().mkpath(directory);
+
+		QString fileName = fileNameFromUrl(url, i);
+		QString fullPath = directory + "/" + fileName;
+
+		// if file already exists
+		if (m_settings.value("SkipExistingFiles").toBool() && QFile::exists(fullPath))
 		{
-			updateProgress();
-
-			while(m_currentFile < lastSpinBox->value())
-			{
-				if (m_currentFile < 0)
-				{
-					m_currentFile = firstSpinBox->value();
-				}
-				else
-				{
-					m_currentFile += stepSpinBox->value();
-				}
-
-				// if succeeded to start download, exit from this method
-				if (downloadFile()) return;
-			}
+			printWarning(tr("File %1 already exists, skip it").arg(fullPath));
+			continue;
 		}
+
+		QString referer = m_refererFormat;
+
+		if (m_refererFormat.indexOf("%1") > -1)
+		{
+			referer = referer.arg(i, m_maskCount, 10, QChar('0'));
+		}
+
+		DownloadEntry entry;
+		entry.url = url;
+		entry.referer = referer;
+		entry.filename = fileName;
+		entry.fullPath = fullPath;
+		entry.method = DownloadEntry::Head; // download big files
+
+		m_manager->addToQueue(entry);
 	}
 
-	if (m_current.url.isEmpty()) return;
+	m_manager->start();
+}
+
+void MainWindow::onFinished()
+{
+	// remove current batch if any
+	if (!m_batches.isEmpty())
+	{
+		m_batches.removeFirst();
+
+		urlsListView->model()->removeRow(0);
+	}
 
 	if (m_batches.isEmpty())
 	{
@@ -690,30 +687,26 @@ void MainWindow::downloadNextFile()
 		downloadButton->setText(tr("Download"));
 
 		restoreCurrent();
-
-		return;
 	}
-
-	m_batches.removeFirst();
-
-	urlsListView->model()->removeRow(0);
-
-	downloadNextBatch();
+	else
+	{
+		downloadNextBatch();
+	}
 }
 
-void MainWindow::updateProgress()
+void MainWindow::updateProgress(int currentFile)
 {
-	m_progressTotal->setValue(m_currentFile);
+	m_progressTotal->setValue(currentFile);
 
 #ifdef Q_OS_WIN32
 	QWinTaskbarProgress *progress = m_button->progress();
 
-	if (m_currentFile == lastSpinBox->value())
+	if (currentFile == lastSpinBox->value())
 	{
 		// end
 		progress->hide();
 	}
-	else if (m_currentFile == firstSpinBox->value())
+	else if (currentFile == firstSpinBox->value())
 	{
 		// beginning
 		progress->show();
@@ -723,72 +716,11 @@ void MainWindow::updateProgress()
 	{
 		// progress
 		progress->show();
-		progress->setValue(m_currentFile);
+		progress->setValue(currentFile);
 	}
 #else
 	// TODO: for other OSes
 #endif
-}
-
-bool MainWindow::downloadFile()
-{
-	QString str;
-
-	if (m_maskCount)
-	{
-		str = m_urlFormat.arg(m_currentFile, m_maskCount, 10, QChar('0'));
-	}
-	else
-	{
-		str = m_urlFormat;
-	}
-
-	return downloadUrl(str);
-}
-
-bool MainWindow::downloadUrl(const QString& str)
-{
-	m_fileLabel->setText(str);
-
-	QString fileName = directoryFromUrl(str) + "/" + fileNameFromUrl(str);
-
-	// if file already exists
-	if (m_settings.value("SkipExistingFiles").toBool() && QFile::exists(fileName))
-	{
-		printWarning(tr("File %1 already exists, skip it").arg(fileName));
-		return false;
-	}
-
-	QUrl url(str);
-
-	// if bad url
-	if (!url.isValid() || url.scheme().isEmpty())
-	{
-		printWarning(tr("URL %1 is invalid").arg(str));
-		return false;
-	}
-
-	QString referer = m_refererFormat;
-
-	if (m_refererFormat.indexOf("%1") > -1)
-		referer = referer.arg(m_currentFile, m_maskCount, 10, QChar('0'));
-
-	QNetworkRequest request;
-	request.setUrl(url);
-	request.setRawHeader("Referer", referer.toUtf8());
-	request.setRawHeader("User-Agent", userAgentEdit->text().toUtf8());
-
-	QNetworkReply* reply = m_manager->get(request);
-
-	if (!reply)
-	{
-		printError(tr("Unable to download %1").arg(str));
-		return false;
-	}
-
-	connect(reply, &QNetworkReply::downloadProgress, this, &MainWindow::onDownloadProgress);
-
-	return true;
 }
 
 void MainWindow::onDownloadProgress(qint64 done, qint64 total)
@@ -796,147 +728,15 @@ void MainWindow::onDownloadProgress(qint64 done, qint64 total)
 	m_progressCurrent->setValue(total > 0 ? done * 100 / total:0);
 }
 
-QString MainWindow::redirectUrl(const QString& newUrl, const QString& oldUrl) const
+void MainWindow::onDownloadFailed(const QString& error, const DownloadEntry& entry)
 {
-	QString redirectUrl;
-	/*
-	 * Check if the URL is empty and
-	 * that we aren't being fooled into a infinite redirect loop.
-	 * We could also keep track of how many redirects we have been to
-	 * and set a limit to it, but we'll leave that to you.
-	 */
-	if (!newUrl.isEmpty() && newUrl != oldUrl) redirectUrl = newUrl;
+	printError(tr("Error HTTP %1: %2").arg(entry.url).arg(error));
 
-	return redirectUrl;
-}
+	m_downloading = false;
 
-void MainWindow::onFinished(QNetworkReply *reply)
-{
-	int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
+	downloadButton->setText(tr("Download"));
 
-	QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
-	QString contentDisposition = reply->header(QNetworkRequest::ContentDispositionHeader).toString();
-	QString contentEncoding = QString::fromLatin1(reply->rawHeader("Content-Encoding"));
-	QNetworkReply::NetworkError error = reply->error();
-	QString url = reply->url().toString();
-	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
-
-	QByteArray data = reply->readAll();
-
-	reply->deleteLater();
-/*
-	nlwarning("Download finished with HTTP status code %d when downloading %s", status, Q2C(url));
-
-	closeFile();
-
-	if (QFileInfo(m_fullPath).size() == m_size)
-	{
-		bool ok = NLMISC::CFile::setFileModificationDate(m_fullPath.toUtf8().constData(), m_lastModified.toTime_t());
-
-		if (m_listener) m_listener->operationSuccess(m_size);
-
-		emit downloadDone();
-	}
-	else if (status >= 200 && status < 300)
-	{
-		if (m_listener) m_listener->operationContinue();
-	}
-	else
-	{
-		if (m_listener) m_listener->operationFail(tr("HTTP error: %1").arg(status));
-	}
-*/
-	// if data are still compressed (deflate ?), uncompress them
-	if (contentEncoding == "gzip" && !data.isEmpty() && data.at(0) == 0x1f)
-	{
-		// uncompress data
-		//data = Kervala::gUncompress(data);
-		qDebug() << "compressed";
-	}
-
-	switch (statusCode)
-	{
-		case 200:
-		{
-			QString dir = directoryFromUrl(url);
-
-			// create all intermediate directories
-			QDir().mkpath(dir);
-
-			QString fileName;
-
-			if (!contentDisposition.isEmpty())
-			{
-				int pos = contentDisposition.indexOf("filename=");
-
-				if (pos > -1)
-					fileName = contentDisposition.mid(pos+9);
-			}
-
-			if (fileName.isEmpty()) fileName = dir + "/" + fileNameFromUrl(url);
-
-			if (!m_settings.value("SkipExistingFiles").toBool() || !QFile::exists(fileName))
-			{
-				QFile file(fileName);
-
-				if (file.open(QIODevice::WriteOnly))
-				{
-					file.write(data);
-					file.close();
-
-					setFileModificationDate(fileName, lastModified);
-
-					downloadNextFile();
-				}
-				else
-				{
-					printError(tr("Unable to save the file %1").arg(fileName));
-				}
-			}
-			else
-			{
-				printWarning(tr("File %1 already exists").arg(fileName));
-			}
-		}
-		break;
-
-		case 301:
-		case 302:
-		case 303:
-		case 305:
-		case 307:
-		case 308:
-		{
-			QString newUrl = redirectUrl(redirection, url);
-
-			// relative URL
-			if (newUrl.left(1) == "/")
-			{
-				QUrl url2(url);
-				newUrl = QString("%1://%2%3").arg(url2.scheme()).arg(url2.host()).arg(newUrl);
-			}
-
-			if (!newUrl.isEmpty())
-			{
-				qDebug() << "redirected from" << url << "to" << newUrl;
-
-				downloadUrl(newUrl);
-			}
-
-			break;
-		}
-
-		default:
-		printError(tr("Error HTTP %1: %2").arg(statusCode).arg(reply->errorString()));
-
-		if (m_settings.value("StopOnError").toBool())
-		{
-			m_downloading = false;
-		}
-
-		downloadNextFile();
-	}
+	restoreCurrent();
 }
 
 void MainWindow::printLog(const QString &style, const QString &str)
@@ -960,325 +760,3 @@ void MainWindow::printError(const QString &str)
 {
 	printLog("error", str);
 }
-/*
-bool CDownloader::prepareFile(const QString& url, const QString& fullPath)
-{
-	if (url.isEmpty()) return false;
-
-	m_downloadAfterHead = false;
-
-	if (m_listener) m_listener->operationPrepare();
-
-	m_fullPath = fullPath;
-	m_url = url;
-
-	getFileHead();
-
-	return true;
-}
-
-bool CDownloader::getFile()
-{
-	if (m_fullPath.isEmpty() || m_url.isEmpty())
-	{
-		nlwarning("You forget to call prepareFile before");
-
-		return false;
-	}
-
-	m_downloadAfterHead = true;
-
-	getFileHead();
-
-	return true;
-}
-
-bool CDownloader::openFile()
-{
-	closeFile();
-
-	m_file = new QFile(m_fullPath);
-
-	if (m_file->open(QFile::Append)) return true;
-
-	closeFile();
-
-	return false;
-}
-
-void CDownloader::closeFile()
-{
-	if (m_file)
-	{
-		m_file->close();
-
-		delete m_file;
-		m_file = NULL;
-	}
-}
-
-void CDownloader::getFileHead()
-{
-	if (m_supportsAcceptRanges)
-	{
-		QFileInfo fileInfo(m_fullPath);
-
-		if (fileInfo.exists())
-		{
-			m_offset = fileInfo.size();
-		}
-		else
-		{
-			m_offset = 0;
-		}
-
-		// continue if offset less than size
-		if (m_offset >= m_size)
-		{
-			if (checkDownloadedFile())
-			{
-				// file is already downloaded
-				if (m_listener) m_listener->operationSuccess(m_size);
-
-				emit downloadDone();
-			}
-			else
-			{
-				// or has wrong size
-				if (m_listener) m_listener->operationFail(tr("File is larger (%1B) than expected (%2B)").arg(m_offset).arg(m_size));
-			}
-
-			return;
-		}
-	}
-
-	QNetworkRequest request(m_url);
-	request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:24.0) Gecko/20100101 Firefox/24.0");
-
-	if (m_supportsAcceptRanges)
-	{
-		request.setRawHeader("Range", QString("bytes=%1-").arg(m_offset).toLatin1());
-	}
-
-	QNetworkReply* reply = m_manager->head(request);
-
-	connect(reply, SIGNAL(finished()), SLOT(onHeadFinished()));
-	connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), SLOT(onError(QNetworkReply::NetworkError)));
-
-	startTimer();
-}
-
-void CDownloader::downloadFile()
-{
-	bool ignoreFreeDiskSpaceChecks = CConfigFile::getInstance()->ignoreFreeDiskSpaceChecks();
-	qint64 freeSpace = NLMISC::CSystemInfo::availableHDSpace(m_fullPath.toUtf8().constData());
-
-	if (!ignoreFreeDiskSpaceChecks && freeSpace == 0)
-	{
-		if (m_listener)
-		{
-			QString error = qFromUtf8(NLMISC::formatErrorMessage(NLMISC::getLastError()));
-			m_listener->operationFail(tr("Error '%1' occurred when trying to check free disk space on %2.").arg(error).arg(m_fullPath));
-		}
-		return;
-	}
-
-	if (!ignoreFreeDiskSpaceChecks && freeSpace < m_size - m_offset)
-	{
-		// we have not enough free disk space to continue download
-		if (m_listener) m_listener->operationFail(tr("You only have %1 bytes left on the device, but %2 bytes are needed.").arg(freeSpace).arg(m_size - m_offset));
-		return;
-	}
-
-	if (!openFile())
-	{
-		if (m_listener) m_listener->operationFail(tr("Unable to write file"));
-		return;
-	}
-
-	QNetworkRequest request(m_url);
-	request.setHeader(QNetworkRequest::UserAgentHeader, "Opera/9.80 (Windows NT 6.2; Win64; x64) Presto/2.12.388 Version/12.17");
-
-	if (supportsResume())
-	{
-		request.setRawHeader("Range", QString("bytes=%1-%2").arg(m_offset).arg(m_size - 1).toLatin1());
-	}
-
-	QNetworkReply* reply = m_manager->get(request);
-
-	connect(reply, SIGNAL(finished()), SLOT(onDownloadFinished()));
-	connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), SLOT(onError(QNetworkReply::NetworkError)));
-	connect(reply, SIGNAL(downloadProgress(qint64, qint64)), SLOT(onDownloadProgress(qint64, qint64)));
-	connect(reply, SIGNAL(readyRead()), SLOT(onDownloadRead()));
-
-	if (m_listener) m_listener->operationStart();
-
-	startTimer();
-}
-
-bool CDownloader::checkDownloadedFile()
-{
-	QFileInfo file(m_fullPath);
-
-	return file.size() == m_size && file.lastModified().toUTC() == m_lastModified;
-}
-
-void CDownloader::onHeadFinished()
-{
-	stopTimer();
-
-	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-
-	int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-	QString url = reply->url().toString();
-
-	QString redirection = reply->header(QNetworkRequest::LocationHeader).toString();
-
-	m_size = reply->header(QNetworkRequest::ContentLengthHeader).toInt();
-	m_lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime().toUTC();
-
-	QString acceptRanges = QString::fromLatin1(reply->rawHeader("Accept-Ranges"));
-	QString contentRange = QString::fromLatin1(reply->rawHeader("Content-Range"));
-
-	reply->deleteLater();
-
-	nlinfo("HTTP status code %d on HEAD for %s", status, Q2C(url));
-
-	if (!redirection.isEmpty())
-	{
-		nlinfo("Redirected to %s", Q2C(redirection));
-	}
-
-	// redirection
-	if (status >= 300 && status < 400)
-	{
-		if (redirection.isEmpty())
-		{
-			nlwarning("No redirection defined");
-
-			if (m_listener) m_listener->operationFail(tr("Redirection URL is not defined"));
-			return;
-		}
-
-		// redirection on another server, recheck resume
-		m_supportsAcceptRanges = false;
-		m_supportsContentRange = false;
-
-		m_referer = m_url;
-
-		// update real URL
-		m_url = redirection;
-
-		getFileHead();
-
-		return;
-	}
-
-	// we requested without range
-	else if (status == 200)
-	{
-		// update size
-		if (m_listener) m_listener->operationInit(0, m_size);
-
-		if (!m_supportsAcceptRanges && acceptRanges == "bytes")
-		{
-			nlinfo("Server supports resume for %s", Q2C(url));
-
-			// server supports resume, part 1
-			m_supportsAcceptRanges = true;
-
-			// request range
-			getFileHead();
-			return;
-		}
-
-		// server doesn't support resume or
-		// we requested range, but server always returns 200
-		// download from the beginning
-		nlwarning("Server doesn't support resume, download %s from the beginning", Q2C(url));
-	}
-
-	// we requested with a range
-	else if (status == 206)
-	{
-		// server supports resume
-		QRegExp regexp("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
-
-		if (m_supportsAcceptRanges && regexp.exactMatch(contentRange))
-		{
-			m_supportsContentRange = true;
-			m_offset = regexp.cap(1).toLongLong();
-
-			// when resuming, Content-Length is the size of missing parts to download
-			m_size = regexp.cap(3).toLongLong();
-
-			// update offset and size
-			if (m_listener) m_listener->operationInit(m_offset, m_size);
-
-			nlinfo("Server supports resume for %s: offset %" NL_I64 "d, size %" NL_I64 "d", Q2C(url), m_offset, m_size);
-		}
-		else
-		{
-			nlwarning("Unable to parse %s", Q2C(contentRange));
-		}
-	}
-
-	// other status
-	else
-	{
-		if (m_listener) m_listener->operationFail(tr("Incorrect status code: %1").arg(status));
-		return;
-	}
-
-	if (m_downloadAfterHead)
-	{
-		if (checkDownloadedFile())
-		{
-			nlwarning("Same date and size");
-		}
-		else
-		{
-			downloadFile();
-		}
-	}
-	else
-	{
-		emit downloadPrepared();
-	}
-}
-
-void CDownloader::onError(QNetworkReply::NetworkError error)
-{
-	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-
-	nlwarning("Network error %s (%d) when downloading %s", Q2C(reply->errorString()), error, Q2C(m_url));
-
-	if (!m_listener) return;
-
-	if (error == QNetworkReply::OperationCanceledError)
-	{
-		m_listener->operationStop();
-	}
-}
-
-void CDownloader::onDownloadProgress(qint64 current, qint64 total)
-{
-	stopTimer();
-
-	if (!m_listener) return;
-
-	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-
-	m_listener->operationProgress(m_offset + current, m_url);
-
-	// abort download
-	if (m_listener->operationShouldStop() && reply) reply->abort();
-}
-
-void CDownloader::onDownloadRead()
-{
-	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
-
-	if (m_file && reply) m_file->write(reply->readAll());
-}
-*/

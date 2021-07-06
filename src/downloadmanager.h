@@ -33,8 +33,9 @@ struct DownloadEntry
 	enum Method
 	{
 		None,
-		Get,
-		Post
+		Get, // for small files
+		Head, // for big files
+		Post // for forms
 	};
 
 	DownloadEntry();
@@ -45,6 +46,11 @@ struct DownloadEntry
 	DownloadEntry& operator = (const DownloadEntry &entry);
 
 	void reset();
+	bool checkDownloadedFile() const;
+	bool supportsResume() const;
+
+	bool openFile();
+	void closeFile();
 
 	QNetworkReply *reply;
 	QString url;
@@ -57,9 +63,19 @@ struct DownloadEntry
 	QString offsetParameter;
 	int count;
 	QString countParameter;
-	int type;
+	int type; // custom type of request
 	QString error;
 	QString data;
+	QDateTime time;
+
+	qint64 fileoffset;
+	qint64 filesize;
+
+	bool supportsAcceptRanges;
+	bool supportsContentRange;
+
+	QString fullPath;
+	QSharedPointer<QFile> file; // for head
 };
 
 class COMMON_EXPORT DownloadManager : public QObject
@@ -73,7 +89,7 @@ public:
 	int count() const;
 	bool isEmpty() const;
 
-	bool saveFile(const QByteArray &data, const QDateTime &lastModified, const DownloadEntry &entry);
+	bool saveFile(const QByteArray &data, const DownloadEntry &entry);
 
 	bool download(const DownloadEntry &entry);
 	void downloadNextFile();
@@ -96,9 +112,10 @@ public:
 signals:
 	void downloadQueued(const QString &file);
 	void downloadStarted(const DownloadEntry& entry);
+	void downloadStop(const DownloadEntry& entry);
 	void downloadProgress(int current, int total);
-	void downloadSucceeded(const QByteArray &data, const QDateTime &lastModified, const DownloadEntry &entry);
-	void downloadRedirected(const QString &url, const QDateTime& lastModified, const DownloadEntry& entry);
+	void downloadSucceeded(const QByteArray &data, const DownloadEntry &entry);
+	void downloadRedirected(const QString &url, const DownloadEntry& entry);
 	void downloadFailed(const QString &error, const DownloadEntry &entry);
 	void downloadSaved(const DownloadEntry &entry);
 	void downloadFinished();
@@ -110,16 +127,18 @@ public slots:
 	void start();
 	void stop();
 	void canceled();
-	void started();
-	void progress(qint64 done, qint64 total);
-	void onFinished(QNetworkReply *reply);
+	void onReadyRead();
+	void onProgress(qint64 done, qint64 total);
+	void onHeadFinished();
+	void onGetFinished();
+	void onPostFinished();
 	void addToQueue(const DownloadEntry &entry);
 	void removeFromQueue(const QString &file);
 	void removeFromQueue(QNetworkReply *reply);
 	void removeFromQueue(DownloadEntry *entry);
 	void onAuthentication(const QNetworkProxy &proxy, QAuthenticator *auth);
-	void replyError(QNetworkReply::NetworkError error);
-	void timeout();
+	void onReplyError(QNetworkReply::NetworkError error);
+	void onTimeout();
 	void onMetaDataChanged();
 
 private:
@@ -128,6 +147,9 @@ private:
 
 	DownloadEntry* findEntry(const DownloadEntry &entry) const;
 	DownloadEntry* findEntryByNetworkReply(QNetworkReply *reply) const;
+
+	void dumpHeaders(QNetworkReply* reply);
+	void dumpCookies(const QString &url);
 
 	QNetworkAccessManager *m_manager;
 	bool m_mustStop;

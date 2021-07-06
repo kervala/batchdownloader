@@ -24,6 +24,9 @@
 
 class QProgressBar;
 class QWinTaskbarButton;
+class DownloadManager;
+
+struct DownloadEntry;
 
 struct Batch
 {
@@ -53,8 +56,9 @@ public slots:
 	void onDetectFromURL();
     void onBrowse();
     void onDownload();
-	void onFinished(QNetworkReply *reply);
+	void onFinished();
 	void onDownloadProgress(qint64 done, qint64 total);
+	void onDownloadFailed(const QString& error, const DownloadEntry& entry);
 	void onExportCSV();
 	void onImportCSV();
 	void onClear();
@@ -64,14 +68,10 @@ protected:
 
 	void downloadNextBatch();
 
-	bool downloadFile();
-	bool downloadUrl(const QString &url);
-	void downloadNextFile();
-
 	QString getLastDirectoryFromUrl(const QString &url);
 	QString getBeforeLastDirectoryFromUrl(const QString &url);
 	QString directoryFromUrl(const QString &url);
-	QString fileNameFromUrl(const QString &url);
+	QString fileNameFromUrl(const QString &url, int currentFile);
 
 	bool loadSettings();
 	bool saveSettings();
@@ -80,9 +80,7 @@ protected:
 	void printInfo(const QString &str);
 	void printWarning(const QString &str);
 	void printError(const QString &str);
-	void updateProgress();
-
-	QString redirectUrl(const QString& newUrl, const QString& oldUrl) const;
+	void updateProgress(int currentFile);
 
 	bool loadCSV(const QString& file);
 	bool saveCSV(const QString& file) const;
@@ -90,11 +88,11 @@ protected:
 	void saveCurrent();
 	void restoreCurrent();
 
+	DownloadManager* m_manager;
+
 	QProgressBar *m_progressCurrent;
 	QProgressBar *m_progressTotal;
 	QLabel *m_fileLabel;
-	QNetworkAccessManager *m_manager;
-	int m_currentFile;
 	int m_maskCount;
 	QString m_urlFormat;
 	QString m_refererFormat;
