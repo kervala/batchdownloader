@@ -48,17 +48,14 @@
 int main(int argc, char *argv[])
 {
 #if defined(_MSC_VER) && defined(_DEBUG)
-	_CrtSetDbgFlag (_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
 	QApplication app(argc, argv);
 
-	QApplication::setApplicationName(PRODUCT);
-	QApplication::setOrganizationName(AUTHOR);
-	QApplication::setApplicationVersion(VERSION);
-	QApplication::setWindowIcon(QIcon(":/icons/icon.svg"));
-
-	QLocale locale = QLocale::system();
+	QCoreApplication::setApplicationName(PRODUCT);
+	QCoreApplication::setOrganizationName(AUTHOR);
+	QCoreApplication::setApplicationVersion(VERSION);
 
 	QString folder;
 	QDir dir(QCoreApplication::applicationDirPath());
@@ -87,6 +84,8 @@ int main(int argc, char *argv[])
 
 	folder += "/translations";
 
+	QLocale locale = QLocale::system();
+
 	// load application translations
 	QTranslator localTranslator;
 	if (localTranslator.load(locale, TARGET, "_", folder))
@@ -101,8 +100,10 @@ int main(int argc, char *argv[])
 		QCoreApplication::installTranslator(&qtTranslator);
 	}
 
+	QApplication::setWindowIcon(QIcon(":/icons/icon.svg"));
+
 	MainWindow mainWindow;
-	mainWindow.setWindowTitle(app.applicationName());
+	mainWindow.setWindowTitle(QString("%1 %2").arg(app.applicationName()).arg(app.applicationVersion()));
 	mainWindow.show();
 
 	// only memory leaks are from plugins
