@@ -26,6 +26,7 @@
 	#include <crtdbg.h>
 	#define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
 	#undef realloc
+	#undef free
 #endif
 
 #ifndef _DEBUG
@@ -35,15 +36,7 @@
 #include <QtCore/QtCore>
 #include <QtGui/QtGui>
 #include <QtNetwork/QtNetwork>
-#include <QtXml/QtXml>
-
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
-#define USE_QT5
-#endif
-
-#ifdef USE_QT5
 #include <QtWidgets/QtWidgets>
 #include <QtConcurrent/QtConcurrent>
-#endif
 
 #endif
