@@ -46,6 +46,7 @@ MainWindow::MainWindow():QMainWindow()
 	connect(m_manager, &DownloadManager::queueProgress, this, &MainWindow::onQueueProgress);
 	connect(m_manager, &DownloadManager::queueFinished, this, &MainWindow::onQueueFinished);
 
+	connect(m_manager, &DownloadManager::downloadStarted, this, &MainWindow::onDownloadStarted);
 	connect(m_manager, &DownloadManager::downloadProgress, this, &MainWindow::onDownloadProgress);
 	connect(m_manager, &DownloadManager::downloadFailed, this, &MainWindow::onDownloadFailed);
 
@@ -725,33 +726,9 @@ void MainWindow::onQueueFinished(bool aborted)
 	}
 }
 
-void MainWindow::updateProgress(int currentFile)
+void MainWindow::onDownloadStarted(const DownloadEntry& entry)
 {
-	m_progressTotal->setValue(currentFile);
-
-#ifdef Q_OS_WIN32
-	QWinTaskbarProgress *progress = m_button->progress();
-
-	if (currentFile == lastSpinBox->value())
-	{
-		// end
-		progress->hide();
-	}
-	else if (currentFile == firstSpinBox->value())
-	{
-		// beginning
-		progress->show();
-		progress->setRange(0, lastSpinBox->value());
-	}
-	else
-	{
-		// progress
-		progress->show();
-		progress->setValue(currentFile);
-	}
-#else
-	// TODO: for other OSes
-#endif
+	m_fileLabel->setText(entry.url);
 }
 
 void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
