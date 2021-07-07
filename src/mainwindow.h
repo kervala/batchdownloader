@@ -54,15 +54,19 @@ public:
 
 public slots:
 	void onDetectFromURL();
-    void onBrowse();
-    void onDownload();
-	void onFinished();
-	void onDownloadProgress(qint64 done, qint64 total);
-	void onDownloadFailed(const QString& error, const DownloadEntry& entry);
+	void onBrowse();
+	void onDownloadClicked();
 	void onExportCSV();
 	void onImportCSV();
 	void onClear();
 
+	void onQueueStarted(int total);
+	void onQueueProgress(int current, int total);
+	void onQueueFinished(bool aborted);
+
+	void onDownloadProgress(qint64 done, qint64 total, int speed);
+	void onDownloadFailed(const QString& error, const DownloadEntry& entry);
+	
 protected:
 	void showEvent(QShowEvent *e);
 
@@ -90,17 +94,18 @@ protected:
 
 	DownloadManager* m_manager;
 
+	QLabel* m_fileLabel;
+	QLabel* m_speedLabel;
 	QProgressBar *m_progressCurrent;
 	QProgressBar *m_progressTotal;
-	QLabel *m_fileLabel;
+
 	int m_maskCount;
 	QString m_urlFormat;
 	QString m_refererFormat;
+
 	QSettings m_settings;
 
 	QWinTaskbarButton *m_button;
-
-	bool m_downloading;
 
 	Batches m_batches;
 

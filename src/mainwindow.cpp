@@ -32,7 +32,7 @@
 #include <QtWinExtras/QWinTaskbarButton>
 #endif
 
-MainWindow::MainWindow():QMainWindow(), m_downloading(false)
+MainWindow::MainWindow():QMainWindow()
 {
 	setupUi(this);
 
@@ -42,10 +42,12 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 
 	m_manager = new DownloadManager(this);
 
-	connect(m_manager, &DownloadManager::downloadFinished, this, &MainWindow::onFinished);
+	connect(m_manager, &DownloadManager::queueStarted, this, &MainWindow::onQueueStarted);
+	connect(m_manager, &DownloadManager::queueProgress, this, &MainWindow::onQueueProgress);
+	connect(m_manager, &DownloadManager::queueFinished, this, &MainWindow::onQueueFinished);
+
 	connect(m_manager, &DownloadManager::downloadProgress, this, &MainWindow::onDownloadProgress);
 	connect(m_manager, &DownloadManager::downloadFailed, this, &MainWindow::onDownloadFailed);
-
 
 /*
 	void downloadStarted(const DownloadEntry & entry);
@@ -57,6 +59,10 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 	m_fileLabel = new QLabel(this);
 	m_fileLabel->setMinimumSize(QSize(500, 12));
 	statusbar->addWidget(m_fileLabel);
+
+	m_speedLabel = new QLabel(this);
+	m_speedLabel->setMaximumSize(QSize(16777215, 12));
+	statusbar->addWidget(m_speedLabel);
 
 	m_progressCurrent = new QProgressBar(this);
 	m_progressCurrent->setMaximumSize(QSize(16777215, 12));
@@ -71,7 +77,7 @@ MainWindow::MainWindow():QMainWindow(), m_downloading(false)
 	loadSettings();
 
 	connect(detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
-	connect(downloadButton, &QPushButton::clicked, this, &MainWindow::onDownload);
+	connect(downloadButton, &QPushButton::clicked, this, &MainWindow::onDownloadClicked);
 	connect(browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
 	connect(urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
 	connect(urlsExportPushButton, &QPushButton::clicked, this, &MainWindow::onExportCSV);
@@ -408,29 +414,33 @@ QString MainWindow::fileNameFromUrl(const QString &url, int currentFile)
 	QString fileName = QFileInfo(url).fileName();
 	QString formatFileName = QFileInfo(m_urlFormat).fileName();
 
-	// check if mask is in filename or directory
-	bool staticFilename = fileName == formatFileName;
-
-	if (staticFilename)
+	// no mask
+	if (m_maskCount > 0)
 	{
-		int extPos = fileName.lastIndexOf('.');
+		// check if mask is in filename or directory
+		bool staticFilename = fileName == formatFileName;
 
-		QString ext;
-		QString base;
-
-		if (extPos > -1)
+		if (staticFilename)
 		{
-			ext = fileName.mid(extPos + 1);
-			base = fileName.mid(0, extPos);
+			int extPos = fileName.lastIndexOf('.');
 
-			fileName = base + "%1." + ext;
-		}
-		else
-		{
-			fileName = "%1.jpg";
-		}
+			QString ext;
+			QString base;
 
-		fileName = fileName.arg(currentFile, m_maskCount, 10, QChar('0'));
+			if (extPos > -1)
+			{
+				ext = fileName.mid(extPos + 1);
+				base = fileName.mid(0, extPos);
+
+				fileName = base + "%1." + ext;
+			}
+			else
+			{
+				fileName = "%1.jpg";
+			}
+
+			fileName = fileName.arg(currentFile, m_maskCount, 10, QChar('0'));
+		}
 	}
 
 	if (!param.isEmpty())
@@ -525,12 +535,10 @@ void MainWindow::onBrowse()
 		folderEdit->setText(folder);
 }
 
-void MainWindow::onDownload()
+void MainWindow::onDownloadClicked()
 {
-	if (m_downloading)
+	if (!m_manager->isEmpty())
 	{
-		m_downloading = false;
-
 		m_manager->stop();
 
 		return;
@@ -565,6 +573,9 @@ void MainWindow::restoreCurrent()
 {
 	// restore current batch
 	const Batch& batch = m_current;
+
+	// don't reset if URL is empty
+	if (batch.url.isEmpty()) return;
 
 	folderEdit->setText(batch.directory);
 	urlEdit->setText(batch.url);
@@ -620,15 +631,17 @@ void MainWindow::downloadNextBatch()
 	}
 
 	// start download
-	m_downloading = true;
-
 	downloadButton->setText(tr("Stop"));
 
 	// m_fileLabel->setText(str);
 
 	QString url = m_urlFormat;
 
-	for (int i = firstSpinBox->value(); i <= lastSpinBox->value(); i += stepSpinBox->value())
+	int first = firstSpinBox->value();
+	int last = lastSpinBox->value();
+	int step = stepSpinBox->value();
+
+	for (int i = first; i <= last; i += step)
 	{
 		if (m_maskCount > 0)
 		{
@@ -662,7 +675,7 @@ void MainWindow::downloadNextBatch()
 		entry.referer = referer;
 		entry.filename = fileName;
 		entry.fullPath = fullPath;
-		entry.method = DownloadEntry::Head; // download big files
+		entry.method = DownloadEntry::Method::Head; // download big files
 
 		m_manager->addToQueue(entry);
 	}
@@ -670,27 +683,45 @@ void MainWindow::downloadNextBatch()
 	m_manager->start();
 }
 
-void MainWindow::onFinished()
+void MainWindow::onQueueStarted(int total)
 {
-	// remove current batch if any
-	if (!m_batches.isEmpty())
+	downloadButton->setText(tr("Stop"));
+}
+
+void MainWindow::onQueueProgress(int current, int total)
+{
+	updateProgress(current);
+}
+
+void MainWindow::onQueueFinished(bool aborted)
+{
+	if (!aborted)
 	{
-		m_batches.removeFirst();
+		// remove current batch if any
+		if (!m_batches.isEmpty())
+		{
+			m_batches.removeFirst();
 
-		urlsListView->model()->removeRow(0);
-	}
+			urlsListView->model()->removeRow(0);
+		}
 
-	if (m_batches.isEmpty())
-	{
-		m_downloading = false;
+		if (m_batches.isEmpty())
+		{
+			restoreCurrent();
 
-		downloadButton->setText(tr("Download"));
-
-		restoreCurrent();
+			downloadButton->setText(tr("Download"));
+		}
+		else
+		{
+			downloadNextBatch();
+		}
 	}
 	else
 	{
-		downloadNextBatch();
+		// don't delete batches when aborted
+		restoreCurrent();
+
+		downloadButton->setText(tr("Download"));
 	}
 }
 
@@ -723,16 +754,15 @@ void MainWindow::updateProgress(int currentFile)
 #endif
 }
 
-void MainWindow::onDownloadProgress(qint64 done, qint64 total)
+void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
 {
 	m_progressCurrent->setValue(total > 0 ? done * 100 / total:0);
+	m_speedLabel->setText(tr("%1 KiB/s").arg(speed));
 }
 
 void MainWindow::onDownloadFailed(const QString& error, const DownloadEntry& entry)
 {
 	printError(tr("Error HTTP %1: %2").arg(entry.url).arg(error));
-
-	m_downloading = false;
 
 	downloadButton->setText(tr("Download"));
 

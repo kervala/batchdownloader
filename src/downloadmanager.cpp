@@ -48,11 +48,7 @@ DownloadEntry::~DownloadEntry()
 		reply->deleteLater();
 	}
 
-	if (file)
-	{
-		file->close();
-		file->deleteLater();
-	}
+	closeFile();
 }
 
 bool DownloadEntry::operator == (const DownloadEntry &entry) const
@@ -189,38 +185,39 @@ bool DownloadManager::isEmpty() const
 	return m_entries.empty();
 }
 
-bool DownloadManager::saveFile(const QByteArray &data, const DownloadEntry &entry)
+bool DownloadManager::saveFile(DownloadEntry* entry, const QByteArray &data)
 {
 	// if no filename has been specified or invalid, don't save it
-	if (entry.fullPath.isEmpty() || entry.fullPath.startsWith("?")) return false;
+	if (entry->fullPath.isEmpty() || entry->fullPath.startsWith("?")) return false;
 
 	// don't save empty files
 	if (data.size() < 1) return false;
 
-	if (!QFile::exists(entry.fullPath))
+	if (!QFile::exists(entry->fullPath))
 	{
-		QString directory = QFileInfo(entry.fullPath).absolutePath();
+		QString directory = QFileInfo(entry->fullPath).absolutePath();
 
 		// create directory if not exists
 		if (!QFile::exists(directory)) QDir().mkpath(directory);
 
 		if (getFreeDiskSpace(directory) < data.size())
 		{
-			emit downloadFailed(tr("Not enough disk space to save %1").arg(directory), entry);
+			emit downloadFailed(tr("Not enough disk space to save %1").arg(directory), *entry);
 
 			stop();
 
 			return false;
 		}
 
-		if (!::saveFile(entry.fullPath, data, entry.time))
+		if (!::saveFile(entry->fullPath, data, entry->time))
 		{
-			qCritical() << "Unable to save the file" << entry.fullPath;
+			processError(entry, tr("Unable to save %1").arg(entry->fullPath));
+
 			return false;
 		}
 	}
 
-	emit downloadSaved(entry);
+	emit downloadSaved(*entry);
 
 	return true;
 }
@@ -340,33 +337,47 @@ void DownloadManager::reset()
 
 void DownloadManager::start()
 {
-	foreach(DownloadEntry *entry, m_entries)
-	{
-		if (entry) downloadEntry(entry);
+	m_queueInitialSize = m_entries.size();;
 
 	downloadNextFile();
 
-	if (m_entries.empty()) emit downloadFinished();
+	emit queueStarted(m_queueInitialSize);
 }
 
 void DownloadManager::stop()
 {
-	reset();
-
 	m_mustStop = true;
 }
 
 void DownloadManager::downloadNextFile()
 {
-	if (!isEmpty())
+	// download aborted, queue finished and reset all items
+	if (m_mustStop)
 	{
-		DownloadEntry *entry = m_entries.front();
+		emit queueFinished(true);
 
-		if (entry) downloadEntry(entry);
+		reset();
+
+		return;
 	}
-	else
+
+	// queue finished
+	if (isEmpty())
 	{
-		emit downloadFinished();
+		emit queueProgress(m_queueInitialSize, m_queueInitialSize);
+		emit queueFinished(false);
+
+		return;
+	}
+
+	// process next item
+	DownloadEntry *entry = m_entries.front();
+
+	if (!entry) return;
+
+	if (downloadEntry(entry))
+	{
+		emit queueProgress(m_queueInitialSize - count(), m_queueInitialSize);
 	}
 }
 
@@ -395,10 +406,16 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 		entry->reply = NULL;
 	}
 
+	if (m_mustStop)
+	{
+		return false;
+	}
+
 	QUrl url(entry->url);
 
-	if (!url.isValid() || url.scheme().left(4) != "http" || m_mustStop)
+	if (!url.isValid() || url.scheme().left(4) != "http")
 	{
+		// invalid entry
 		removeFromQueue(entry);
 
 		downloadNextFile();
@@ -592,6 +609,9 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 				request.setRawHeader("Range", QString("bytes=%1-%2").arg(entry->fileoffset).arg(entry->filesize - 1).toLatin1());
 			}
 
+			// start download
+			entry->downloadStart = QDateTime::currentDateTime();
+
 			reply = m_manager->get(request);
 
 			connect(reply, &QNetworkReply::finished, this, &DownloadManager::onGetFinished);
@@ -779,6 +799,12 @@ void DownloadManager::onReadyRead()
 	{
 		entry->file->write(reply->readAll());
 	}
+
+	// abort after writing data to disk
+	if (m_mustStop)
+	{
+		reply->abort();
+	}
 }
 
 void DownloadManager::onProgress(qint64 done, qint64 total)
@@ -949,6 +975,7 @@ void DownloadManager::processContentRange(DownloadEntry *entry, const QString &c
 void DownloadManager::onGetFinished()
 {
 	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+	Q_ASSERT(reply != nullptr);
 
 	if (m_timerDownload->isActive()) m_timerDownload->stop();
 
@@ -962,16 +989,11 @@ void DownloadManager::onGetFinished()
 	QString url = reply->url().toString();
 
 	DownloadEntry* entry = findEntryByNetworkReply(reply);
-
-	if (!entry)
-	{
-		// already removed from queue
-		// TODO: what to do?
-		return;
-	}
+	Q_ASSERT(entry != nullptr);
 
 	QByteArray data;
 
+	// don't need to call readAll() if all chunks already written to a file
 	if (!entry->file)
 	{
 		data = reply->readAll();
@@ -984,9 +1006,12 @@ void DownloadManager::onGetFinished()
 		}
 	}
 
+	entry->reply->deleteLater();
+	entry->reply = nullptr;
+
 	if (error != QNetworkReply::NoError)
 	{
-		if (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired)
+		if ((error == QNetworkReply::OperationCanceledError) || (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired))
 		{
 			// connection expired or aborted
 			downloadNextFile();
@@ -1026,30 +1051,20 @@ void DownloadManager::onGetFinished()
 			{
 				entry->closeFile();
 
-				if (QFileInfo(entry->fullPath).size() == entry->filesize)
-				{
-					setFileModificationDate(entry->fullPath, lastModified);
+				qint64 filesize = QFileInfo(entry->fullPath).size();
 
-					downloadNextFile();
+				if (filesize != entry->filesize)
+				{
+					processError(entry, tr("File %1 has a wrong size (%2 received / %3 expected)").arg(entry->fullPath).arg(filesize).arg(entry->filesize));
+
+					return;
 				}
+
+				setFileModificationDate(entry->fullPath, lastModified);
 			}
 			else
 			{
-				QFile file(entry->fullPath);
-
-				if (file.open(QIODevice::WriteOnly))
-				{
-					file.write(data);
-					file.close();
-
-					setFileModificationDate(entry->fullPath, lastModified);
-
-					downloadNextFile();
-				}
-				else
-				{
-					//printError(tr("Unable to save the file %1").arg(fileName));
-				}
+				if (!saveFile(entry, data)) return;
 			}
 
 			emit downloadSucceeded(data, *entry);
@@ -1072,7 +1087,6 @@ void DownloadManager::onGetFinished()
 
 			break;
 		}
-		break;
 
 		case 301:
 		case 302:
@@ -1094,17 +1108,12 @@ void DownloadManager::onGetFinished()
 			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
-
-	if (isEmpty())
-	{
-		stop();
-		emit downloadFinished();
-	}
 }
 
 void DownloadManager::onHeadFinished()
 {
 	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+	Q_ASSERT(reply != nullptr);
 
 	if (m_timerDownload->isActive()) m_timerDownload->stop();
 
@@ -1116,6 +1125,7 @@ void DownloadManager::onHeadFinished()
 	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
 	QString location = reply->header(QNetworkRequest::LocationHeader).toString();
 	QNetworkReply::NetworkError error = reply->error();
+	QString errorString = reply->errorString();
 	QString url = reply->url().toString();
 
 	qint64 size = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
@@ -1126,17 +1136,10 @@ void DownloadManager::onHeadFinished()
 	dumpHeaders(reply);
 	dumpCookies(url);
 
-	reply->deleteLater();
-
 	DownloadEntry* entry = findEntryByNetworkReply(reply);
+	Q_ASSERT(entry != nullptr);
 
-	if (!entry)
-	{
-		// already removed from queue
-		// TODO: what to do?
-		return;
-	}
-
+	entry->reply->deleteLater();
 	entry->reply = nullptr;
 
 	if (error != QNetworkReply::NoError)
@@ -1162,7 +1165,8 @@ void DownloadManager::onHeadFinished()
 		{
 		case 200:
 		{
-			if (QFile::exists(entry->fullPath))
+			// already downloaded by parts
+			if (!entry->fullPath.isEmpty() && QFile::exists(entry->fullPath))
 			{
 				if (QFileInfo(entry->fullPath).size() == entry->filesize)
 				{
@@ -1210,26 +1214,22 @@ void DownloadManager::onHeadFinished()
 			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
-
-	if (isEmpty())
-	{
-		stop();
-	}
 }
 
 void DownloadManager::onPostFinished()
 {
 	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+	Q_ASSERT(reply != nullptr);
 
 	if (m_timerDownload->isActive()) m_timerDownload->stop();
 
 	int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-	QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
-	QString contentDisposition = reply->header(QNetworkRequest::ContentDispositionHeader).toString();
+	//QString contentType = reply->header(QNetworkRequest::ContentTypeHeader).toString();
 	QString contentEncoding = QString::fromLatin1(reply->rawHeader("Content-Encoding"));
 	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
 	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
 	QNetworkReply::NetworkError error = reply->error();
+	QString errorString = reply->errorString();
 	QString url = reply->url().toString();
 
 	QByteArray data = reply->readAll();
@@ -1243,6 +1243,12 @@ void DownloadManager::onPostFinished()
 
 	dumpHeaders(reply);
 	dumpCookies(url);
+
+	DownloadEntry* entry = findEntryByNetworkReply(reply);
+	Q_ASSERT(entry != nullptr);
+
+	entry->reply->deleteLater();
+	entry->reply = nullptr;
 
 	if (error != QNetworkReply::NoError)
 	{
@@ -1275,49 +1281,46 @@ void DownloadManager::onPostFinished()
 	}
 	else
 	{
-		DownloadEntry* entry = findEntryByNetworkReply(reply);
-
-		if (entry)
+		switch (statusCode)
 		{
-			switch (statusCode)
+		case 200:
+		{
+			emit downloadSucceeded(data, *entry);
+
+			// process next AJAX
+			if (!data.isEmpty() && entry->count && entry->offset < entry->count)
 			{
-			case 200:
-			{
-				if (!contentDisposition.isEmpty())
-				{
-					QRegularExpression reg("^attachment; filename=\"([a-zA-Z0-9._-]+)\"; filename\\*=utf-8''([a-zA-Z0-9._-]+)$");
+				// use same parameters
+				DownloadEntry* next = new DownloadEntry(*entry);
 
-					QRegularExpressionMatch match = reg.match(contentDisposition);
+				// increase offset
+				++next->offset;
 
-					if (match.hasMatch())
-					{
-						QString asciiFilename = match.captured(1);
-						QString utf8Filename = match.captured(2);
+				m_entries << next;
+			}
 
-						if (asciiFilename != utf8Filename)
-						{
-							qDebug() << "UTF-8 and ASCII filenames are different";
-						}
+			removeFromQueue(entry);
 
-						// always use filename from content-disposition
-						entry->filename = asciiFilename;
-					}
-				}
+			downloadNextFile();
+		}
+		break;
 
-				emit downloadSucceeded(data, *entry);
-
-				// process next AJAX
-				if (!data.isEmpty() && entry->count && entry->offset < entry->count)
-				{
-					// use same parameters
-					DownloadEntry* next = new DownloadEntry(*entry);
+		case 301:
+		case 302:
+		case 303:
+		case 305:
+		case 307:
+		case 308:
+		{
+			// never redirect after posting data
+			emit downloadRedirected(redirection, *entry);
 
 			removeFromQueue(entry);
 
 			downloadNextFile();
 
-					m_entries << next;
-				}
+			break;
+		}
 
 		case 407:
 			// ask authorization
@@ -1327,26 +1330,6 @@ void DownloadManager::onPostFinished()
 			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
-
-	if (isEmpty())
-	{
-		stop();
-		emit downloadFinished();
-	}
-}
-
-QString DownloadManager::redirectUrl(const QString &newUrl, const QString &oldUrl) const
-{
-	QString redirectUrl;
-	/*
-	 * Check if the URL is empty and
-	 * that we aren't being fooled into a infinite redirect loop.
-	 * We could also keep track of how many redirects we have been to
-	 * and set a limit to it, but we'll leave that to you.
-	 */
-	if (!newUrl.isEmpty() && newUrl != oldUrl) redirectUrl = newUrl;
-
-	return redirectUrl;
 }
 
 void DownloadManager::dumpHeaders(QNetworkReply *reply)

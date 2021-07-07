@@ -90,7 +90,7 @@ public:
 	int count() const;
 	bool isEmpty() const;
 
-	bool saveFile(const QByteArray &data, const DownloadEntry &entry);
+	bool saveFile(DownloadEntry *entry, const QByteArray& data);
 
 	bool download(const DownloadEntry &entry);
 	void downloadNextFile();
@@ -117,8 +117,12 @@ signals:
 	void downloadSucceeded(const QByteArray &data, const DownloadEntry &entry);
 	void downloadRedirected(const QString &url, const DownloadEntry& entry);
 	void downloadFailed(const QString &error, const DownloadEntry &entry);
+	void downloadWarning(const QString& warning, const DownloadEntry& entry);
 	void downloadSaved(const DownloadEntry &entry);
-	void downloadFinished();
+
+	void queueStarted(int total);
+	void queueProgress(int current, int total);
+	void queueFinished(bool aborted);
 	
 	void authorizationFailed(const QString& url, const QByteArray &data);
 
@@ -165,6 +169,8 @@ private:
 	QTimer *m_timerConnection;
 	QTimer *m_timerDownload;
 	QNetworkProxy m_proxy;
+
+	int m_queueInitialSize;
 };
 
 #endif
