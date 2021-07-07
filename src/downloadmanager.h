@@ -133,7 +133,6 @@ public slots:
 	void onPostFinished();
 	void addToQueue(const DownloadEntry &entry);
 	void removeFromQueue(const QString &file);
-	void removeFromQueue(QNetworkReply *reply);
 	void removeFromQueue(DownloadEntry *entry);
 	void onAuthentication(const QNetworkProxy &proxy, QAuthenticator *auth);
 	void onReplyError(QNetworkReply::NetworkError error);

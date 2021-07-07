@@ -278,30 +278,6 @@ void DownloadManager::removeFromQueue(const QString &url)
 	}
 }
 
-void DownloadManager::removeFromQueue(QNetworkReply *reply)
-{
-	DownloadEntry *entry = NULL;
-	int index = -1;
-
-	for (int i = 0, len = m_entries.size(); i < len; ++i)
-	{
-		entry = m_entries[i];
-
-		if (entry && entry->reply == reply)
-		{
-			index = i;
-			break;
-		}
-	}
-
-	if (index != -1)
-	{
-		m_entries.removeAt(index);
-
-		if (entry) delete entry;
-	}
-}
-
 void DownloadManager::removeFromQueue(DownloadEntry *entry)
 {
 	m_entries.removeAll(entry);
@@ -1017,14 +993,14 @@ void DownloadManager::onGetFinished()
 			// CAPTCHA
 			if (error == 201 && statusCode == 403)
 			{
-				removeFromQueue(reply);
+				removeFromQueue(entry);
 
 				emit authorizationFailed(url, data);
 			}
 			// email verification
 			else if (error == 204 && statusCode == 401)
 			{
-				removeFromQueue(reply);
+				removeFromQueue(entry);
 
 				emit authorizationFailed(url, data);
 			}
@@ -1087,7 +1063,7 @@ void DownloadManager::onGetFinished()
 				m_entries << next;
 			}
 
-			removeFromQueue(reply);
+			removeFromQueue(entry);
 
 			downloadNextFile();
 
@@ -1277,14 +1253,14 @@ void DownloadManager::onPostFinished()
 			// CAPTCHA
 			if (error == 201 && statusCode == 403)
 			{
-				removeFromQueue(reply);
+				removeFromQueue(entry);
 
 				emit authorizationFailed(url, data);
 			}
 			// email verification
 			else if (error == 204 && statusCode == 401)
 			{
-				removeFromQueue(reply);
+				removeFromQueue(entry);
 
 				emit authorizationFailed(url, data);
 			}
