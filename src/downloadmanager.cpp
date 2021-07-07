@@ -27,7 +27,7 @@
 #define new DEBUG_NEW
 #endif
 
-DownloadEntry::DownloadEntry():reply(NULL), method(Get), offset(0), count(0), type(0), fileoffset(0), filesize(0), supportsAcceptRanges(false), supportsContentRange(false), file(nullptr)
+DownloadEntry::DownloadEntry():reply(NULL), method(Method::Get), offset(0), count(0), type(0), fileoffset(0), filesize(0), supportsAcceptRanges(false), supportsContentRange(false), file(nullptr)
 {
 }
 
@@ -95,7 +95,7 @@ void DownloadEntry::reset()
 	url.clear();
 	filename.clear();
 	referer.clear();
-	method = None;
+	method = Method::None;
 	headers.clear();
 	parameters.clear();
 	offset = 0;
@@ -461,7 +461,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 	QNetworkReply *reply = NULL;
 
-	if (entry->method == DownloadEntry::Post)
+	if (entry->method == DownloadEntry::Method::Post)
 	{
 		request.setUrl(url);
 
@@ -500,7 +500,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 			connect(reply, &QNetworkReply::finished, this, &DownloadManager::onPostFinished);
 		}
 	}
-	else if (entry->method == DownloadEntry::Get || entry->method == DownloadEntry::Head)
+	else if (entry->method == DownloadEntry::Method::Get || entry->method == DownloadEntry::Method::Head)
 	{
 		QString query = url.query();
 
@@ -540,7 +540,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 		request.setUrl(url);
 
-		if (entry->method == DownloadEntry::Head)
+		if (entry->method == DownloadEntry::Method::Head)
 		{
 			if (entry->supportsAcceptRanges)
 			{
@@ -622,7 +622,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 	}
 	else
 	{
-		qCritical() << "Wrong method:" << entry->method;
+		qCritical() << "Wrong method:" << (int)entry->method;
 		return false;
 	}
 

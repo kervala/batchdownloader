@@ -30,7 +30,7 @@ class QAuthenticator;
 
 struct DownloadEntry
 {
-	enum Method
+	enum class Method
 	{
 		None,
 		Get, // for small files
