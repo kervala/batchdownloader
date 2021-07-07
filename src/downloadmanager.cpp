@@ -820,13 +820,15 @@ void DownloadManager::onProgress(qint64 done, qint64 total)
 	Q_ASSERT(reply != nullptr);
 
 	DownloadEntry* entry = findEntryByNetworkReply(reply);
-	Q_ASSERT(entry != nullptr);
 
-	int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+	if (entry)
+	{
+		int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
 
-	int speed = seconds > 0 ? done / seconds / 1024:0;
+		int speed = seconds > 0 ? done / seconds / 1024 : 0;
 
-	emit downloadProgress(entry->fileoffset + done, entry->fileoffset + total, speed);
+		emit downloadProgress(entry->fileoffset + done, entry->fileoffset + total, speed);
+	}
 
 	if (m_mustStop)
 	{
