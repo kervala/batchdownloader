@@ -817,9 +817,80 @@ void DownloadManager::onProgress(qint64 done, qint64 total)
 		m_timerDownload->start();
 	}
 
-	emit downloadProgress(done, total);
-
 	QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+	Q_ASSERT(reply != nullptr);
+
+	DownloadEntry* entry = findEntryByNetworkReply(reply);
+	Q_ASSERT(entry != nullptr);
+
+	int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+
+	int speed = seconds > 0 ? done / seconds / 1024:0;
+
+	emit downloadProgress(entry->fileoffset + done, entry->fileoffset + total, speed);
+
+	if (m_mustStop)
+	{
+		reply->abort();
+	}
+}
+
+void DownloadManager::processRedirection(DownloadEntry* entry, const QString& redirection)
+{
+	QString newUrl;
+
+	if (!redirection.isEmpty() && redirection != entry->url)
+	{
+		newUrl = redirection;
+	}
+
+	// relative URL
+	if (newUrl.left(1) == "/")
+	{
+		QUrl url2(entry->url);
+		newUrl = QString("%1://%2%3").arg(url2.scheme()).arg(url2.host()).arg(newUrl);
+	}
+
+	if (!newUrl.isEmpty())
+	{
+		qDebug() << "redirected from" << entry->url << "to" << newUrl;
+
+		// use same parameters
+		entry->referer = entry->url;
+		entry->url = newUrl;
+
+		// redirection on another server, recheck resume
+		entry->supportsAcceptRanges = false;
+		entry->supportsContentRange = false;
+	}
+	else
+	{
+		removeFromQueue(entry);
+	}
+
+	downloadNextFile();
+}
+
+void DownloadManager::processError(DownloadEntry* entry, const QString& error)
+{
+	emit downloadFailed(error, *entry);
+
+	removeFromQueue(entry);
+
+	// clear all files in queue
+	if (m_stopOnError || m_stopOnExpired)
+	{
+		stop();
+	}
+	else
+	{
+		downloadNextFile();
+	}
+}
+
+void DownloadManager::processContentDisposition(DownloadEntry *entry, const QString &contentDisposition)
+{
+	if (contentDisposition.isEmpty()) return;
 
 	if (!reply) return;
 
@@ -889,19 +960,7 @@ void DownloadManager::onGetFinished()
 			}
 			else
 			{
-				emit downloadFailed(reply->errorString(), *entry);
-
-				removeFromQueue(reply);
-
-				// clear all files in queue
-				if (m_stopOnError || m_stopOnExpired)
-				{
-					stop();
-				}
-				else
-				{
-					if (!m_allAtOnce) downloadNextFile();
-				}
+				processError(entry, reply->errorString());
 			}
 		}
 	}
@@ -912,26 +971,7 @@ void DownloadManager::onGetFinished()
 		case 200:
 		case 206:
 		{
-			if (!contentDisposition.isEmpty())
-			{
-				QRegularExpression reg("^attachment; filename=\"([a-zA-Z0-9._-]+)\"; filename\\*=utf-8''([a-zA-Z0-9._-]+)$");
-
-				QRegularExpressionMatch match = reg.match(contentDisposition);
-
-				if (match.hasMatch())
-				{
-					QString asciiFilename = match.captured(1);
-					QString utf8Filename = match.captured(2);
-
-					if (asciiFilename != utf8Filename)
-					{
-						qDebug() << "UTF-8 and ASCII filenames are different";
-					}
-
-					// always use filename from content-disposition
-					entry->filename = asciiFilename;
-				}
-			}
+			processContentDisposition(entry, contentDisposition);
 
 			if (entry->file)
 			{
@@ -992,45 +1032,7 @@ void DownloadManager::onGetFinished()
 		case 307:
 		case 308:
 		{
-			if (entry->method == DownloadEntry::Post)
-			{
-				// never redirect after posting data
-				emit downloadRedirected(redirection, *entry);
-
-				removeFromQueue(reply);
-			}
-			else
-			{
-				QString newUrl = redirectUrl(redirection, url);
-
-				// relative URL
-				if (newUrl.left(1) == "/")
-				{
-					QUrl url2(url);
-					newUrl = QString("%1://%2%3").arg(url2.scheme()).arg(url2.host()).arg(newUrl);
-				}
-
-				if (!newUrl.isEmpty())
-				{
-					qDebug() << "redirected from" << url << "to" << newUrl;
-
-					// use same parameters
-					DownloadEntry* next = new DownloadEntry(*entry);
-					next->url = newUrl;
-
-					// remove already processed entry
-					removeFromQueue(reply);
-
-					// append it to queue
-					m_entries << next;
-				}
-				else
-				{
-					removeFromQueue(reply);
-				}
-			}
-
-			if (!m_allAtOnce) downloadNextFile();
+			processRedirection(entry, redirection);
 
 			break;
 		}
@@ -1040,7 +1042,7 @@ void DownloadManager::onGetFinished()
 			break;
 
 		default:
-			qDebug() << "Unexpected:" << statusCode;
+			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
 
@@ -1097,19 +1099,7 @@ void DownloadManager::onHeadFinished()
 		}
 		else
 		{
-			emit downloadFailed(reply->errorString(), *entry);
-
-			removeFromQueue(reply);
-
-			// clear all files in queue
-			if (m_stopOnError || m_stopOnExpired)
-			{
-				stop();
-			}
-			else
-			{
-				if (!m_allAtOnce) downloadNextFile();
-			}
+			processError(entry, errorString);
 		}
 	}
 	else
@@ -1117,34 +1107,7 @@ void DownloadManager::onHeadFinished()
 		entry->time = lastModified;
 		entry->filesize = size;
 
-		QString fileName;
-
-		if (!contentDisposition.isEmpty())
-		{
-/*
-			int pos = contentDisposition.indexOf("filename=");
-
-			if (pos > -1)
-				fileName = contentDisposition.mid(pos + 9);
-*/
-			QRegularExpression reg("^attachment; filename=\"([a-zA-Z0-9._-]+)\"; filename\\*=utf-8''([a-zA-Z0-9._-]+)$");
-
-			QRegularExpressionMatch match = reg.match(contentDisposition);
-
-			if (match.hasMatch())
-			{
-				QString asciiFilename = match.captured(1);
-				QString utf8Filename = match.captured(2);
-
-				if (asciiFilename != utf8Filename)
-				{
-					qDebug() << "UTF-8 and ASCII filenames are different";
-				}
-
-				// always use filename from content-disposition
-				entry->filename = asciiFilename;
-			}
-		}
+		processContentDisposition(entry, contentDisposition);
 
 		switch (statusCode)
 		{
@@ -1166,57 +1129,14 @@ void DownloadManager::onHeadFinished()
 				}
 			}
 
-			if (!entry->supportsAcceptRanges && acceptRanges == "bytes")
-			{
-				qDebug() << "Server supports resume for" << url;
+			processAcceptRanges(entry, acceptRanges);
 
-				// server supports resume, part 1
-				entry->supportsAcceptRanges = true;
-			}
-			else
-			{
-				// server doesn't support resume or
-				// we requested range, but server always returns 200
-				// download from the beginning
-				qDebug() << "Server doesn't support resume, download" << url << "from the beginning";
-
-				entry->method = DownloadEntry::Get;
-			}
-
-			// reprocess it
-			downloadEntry(entry);
+			break;
 		}
-		break;
 
 		case 206:
 		{
-			// server supports resume
-			QRegularExpression reg("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
-
-			if (entry->supportsAcceptRanges)
-			{
-				QRegularExpressionMatch match = reg.match(contentRange);
-
-				if (match.hasMatch())
-				{
-					entry->supportsContentRange = true;
-					entry->fileoffset = match.captured(1).toLongLong();
-
-					// when resuming, Content-Length is the size of missing parts to download
-					entry->filesize = match.captured(3).toLongLong();
-
-					qDebug() << "Server supports resume for" << url << ":" << entry->fileoffset << "/" << entry->filesize;
-				}
-				else
-				{
-					qDebug() << "Unable to parse" << contentRange;
-				}
-			}
-
-			entry->method = DownloadEntry::Get;
-
-			// reprocess it in GET
-			downloadEntry(entry);
+			processContentRange(entry, contentRange);
 
 			break;
 		}
@@ -1228,34 +1148,7 @@ void DownloadManager::onHeadFinished()
 		case 307:
 		case 308:
 		{
-			QString newUrl = redirectUrl(redirection, url);
-
-			// relative URL
-			if (newUrl.left(1) == "/")
-			{
-				QUrl url2(url);
-				newUrl = QString("%1://%2%3").arg(url2.scheme()).arg(url2.host()).arg(newUrl);
-			}
-
-			if (!newUrl.isEmpty())
-			{
-				qDebug() << "redirected from" << url << "to" << newUrl;
-
-				// use same parameters
-				entry->referer = entry->url;
-				entry->url = newUrl;
-
-				// redirection on another server, recheck resume
-				entry->supportsAcceptRanges = false;
-				entry->supportsContentRange = false;
-
-				// reprocess it
-				downloadEntry(entry);
-			}
-			else
-			{
-				removeFromQueue(reply);
-			}
+			processRedirection(entry, redirection);
 
 			break;
 		}
@@ -1265,14 +1158,7 @@ void DownloadManager::onHeadFinished()
 			break;
 
 		default:
-			qDebug() << "Unexpected:" << statusCode;
-
-			if (m_stopOnError || m_stopOnExpired)
-			{
-				stop();
-			}
-
-			downloadNextFile();
+			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
 
@@ -1334,21 +1220,7 @@ void DownloadManager::onPostFinished()
 			}
 			else
 			{
-				DownloadEntry* entry = findEntryByNetworkReply(reply);
-
-				emit downloadFailed(reply->errorString(), *entry);
-
-				removeFromQueue(reply);
-
-				// clear all files in queue
-				if (m_stopOnError || m_stopOnExpired)
-				{
-					stop();
-				}
-				else
-				{
-					if (!m_allAtOnce) downloadNextFile();
-				}
+				processError(entry, errorString);
 			}
 		}
 	}
@@ -1403,35 +1275,8 @@ void DownloadManager::onPostFinished()
 			}
 			break;
 
-			case 301:
-			case 302:
-			case 303:
-			case 305:
-			case 307:
-			case 308:
-			{
-				// never redirect after posting data
-				emit downloadRedirected(redirection, *entry);
-
-				removeFromQueue(reply);
-
-				if (!m_allAtOnce) downloadNextFile();
-
-				break;
-			}
-
-			case 407:
-				// ask authorization
-				break;
-
-			default:
-				qDebug() << "Unexpected:" << statusCode;
-			}
-		}
-		else
-		{
-			// already removed from queue
-			// TODO: what to do?
+		default:
+			processError(entry, tr("Unexpected status code: %1").arg(statusCode));
 		}
 	}
 

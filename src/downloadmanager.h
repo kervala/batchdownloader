@@ -150,6 +150,12 @@ private:
 	void dumpHeaders(QNetworkReply* reply);
 	void dumpCookies(const QString &url);
 
+	void processRedirection(DownloadEntry* entry, const QString& newUrl);
+	void processError(DownloadEntry* entry, const QString& error);
+	void processContentDisposition(DownloadEntry* entry, const QString& contentDisposition);
+	void processAcceptRanges(DownloadEntry* entry, const QString& acceptRanges);
+	void processContentRange(DownloadEntry* entry, const QString& contentRange);
+
 	QNetworkAccessManager *m_manager;
 	bool m_mustStop;
 	bool m_stopOnError;
