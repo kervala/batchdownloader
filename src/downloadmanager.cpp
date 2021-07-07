@@ -886,9 +886,85 @@ void DownloadManager::processContentDisposition(DownloadEntry *entry, const QStr
 {
 	if (contentDisposition.isEmpty()) return;
 
-	if (!reply) return;
+/*
+	int pos = contentDisposition.indexOf("filename=");
 
-	if (m_mustStop) reply->abort();
+	if (pos > -1)
+		fileName = contentDisposition.mid(pos + 9);
+*/
+	QRegularExpression reg("^attachment; filename=\"([a-zA-Z0-9._-]+)\"; filename\\*=utf-8''([a-zA-Z0-9._-]+)$");
+
+	QRegularExpressionMatch match = reg.match(contentDisposition);
+
+	if (match.hasMatch())
+	{
+		QString asciiFilename = match.captured(1);
+		QString utf8Filename = match.captured(2);
+
+		if (asciiFilename != utf8Filename)
+		{
+			qDebug() << "UTF-8 and ASCII filenames are different";
+		}
+
+		// always use filename from content-disposition
+		entry->filename = asciiFilename;
+	}
+}
+
+void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& acceptRanges)
+{
+	if (!entry->supportsAcceptRanges && acceptRanges == "bytes")
+	{
+		qDebug() << "Server supports resume for" << entry->url;
+
+		// server supports resume, part 1
+		entry->supportsAcceptRanges = true;
+	}
+	else
+	{
+		// server doesn't support resume or
+		// we requested range, but server always returns 200
+		// download from the beginning
+		qDebug() << "Server doesn't support resume, download" << entry->url << "from the beginning";
+
+		entry->method = DownloadEntry::Method::Get;
+	}
+
+	// reprocess it
+	downloadEntry(entry);
+}
+
+void DownloadManager::processContentRange(DownloadEntry *entry, const QString &contentRange)
+{
+	// server supports resume
+	QRegularExpression reg("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
+
+	entry->fileoffset = 0;
+
+	if (entry->supportsAcceptRanges)
+	{
+		QRegularExpressionMatch match = reg.match(contentRange);
+
+		if (match.hasMatch())
+		{
+			entry->supportsContentRange = true;
+			entry->fileoffset = match.captured(1).toLongLong();
+
+			// when resuming, Content-Length is the size of missing parts to download
+			entry->filesize = match.captured(3).toLongLong();
+
+			qDebug() << "Server supports resume for" << entry->url << ":" << entry->fileoffset << "/" << entry->filesize;
+		}
+		else
+		{
+			emit downloadWarning(tr("Unable to parse %1").arg(contentRange), *entry);
+		}
+	}
+
+	entry->method = DownloadEntry::Method::Get;
+
+	// reprocess it in GET
+	downloadEntry(entry);
 }
 
 void DownloadManager::onGetFinished()
