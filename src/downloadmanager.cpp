@@ -154,7 +154,7 @@ bool DownloadEntry::supportsResume() const
 	return supportsAcceptRanges && supportsContentRange;
 }
 
-DownloadManager::DownloadManager(QObject *parent) : QObject(parent), m_mustStop(false), m_allAtOnce(true), m_stopOnError(true), m_stopOnExpired(false)
+DownloadManager::DownloadManager(QObject *parent) : QObject(parent), m_mustStop(false), m_stopOnError(true), m_stopOnExpired(false), m_queueInitialSize(0)
 {
 	m_manager = new QNetworkAccessManager(this);
 
@@ -365,8 +365,7 @@ void DownloadManager::start()
 	{
 		if (entry) downloadEntry(entry);
 
-		if (!m_allAtOnce) break;
-	}
+	downloadNextFile();
 
 	if (m_entries.empty()) emit downloadFinished();
 }
@@ -423,7 +422,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 	{
 		removeFromQueue(entry);
 
-		if (!m_allAtOnce) downloadNextFile();
+		downloadNextFile();
 
 		return false;
 	}
@@ -869,8 +868,8 @@ void DownloadManager::onGetFinished()
 	{
 		if (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired)
 		{
-			// connection expired, retry
-			if (!m_allAtOnce) downloadNextFile();
+			// connection expired or aborted
+			downloadNextFile();
 		}
 		else
 		{
@@ -980,7 +979,9 @@ void DownloadManager::onGetFinished()
 
 			removeFromQueue(reply);
 
-			if (!m_allAtOnce) downloadNextFile();
+			downloadNextFile();
+
+			break;
 		}
 		break;
 
@@ -1092,7 +1093,7 @@ void DownloadManager::onHeadFinished()
 		if (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired)
 		{
 			// connection expired, retry
-			if (!m_allAtOnce) downloadNextFile();
+			downloadNextFile();
 		}
 		else
 		{
@@ -1313,7 +1314,7 @@ void DownloadManager::onPostFinished()
 		if (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired)
 		{
 			// connection expired, retry
-			if (!m_allAtOnce) downloadNextFile();
+			downloadNextFile();
 		}
 		else
 		{

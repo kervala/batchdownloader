@@ -105,7 +105,6 @@ public:
 	bool loadCookiesFromDirectory(const QString& directory, const QString& domain = "");
 	bool loadCookiesFromFile(const QString& filename, const QString &domain = "");
 
-	void setAllAtOnce(bool all = true);
 	void setStopOnError(bool stop = true);
 	void setStopOnExpired(bool stop = true);
 
@@ -153,7 +152,6 @@ private:
 
 	QNetworkAccessManager *m_manager;
 	bool m_mustStop;
-	bool m_allAtOnce;
 	bool m_stopOnError;
 	bool m_stopOnExpired;
 	QList<DownloadEntry*> m_entries;
