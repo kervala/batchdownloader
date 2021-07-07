@@ -634,8 +634,6 @@ void MainWindow::downloadNextBatch()
 	// start download
 	downloadButton->setText(tr("Stop"));
 
-	// m_fileLabel->setText(str);
-
 	QString url = m_urlFormat;
 
 	int first = firstSpinBox->value();
@@ -687,15 +685,46 @@ void MainWindow::downloadNextBatch()
 void MainWindow::onQueueStarted(int total)
 {
 	downloadButton->setText(tr("Stop"));
+
+	m_progressTotal->setMaximum(total);
+
+#ifdef Q_OS_WIN32
+		QWinTaskbarProgress* progress = m_button->progress();
+
+		// beginning
+		progress->show();
+		progress->setRange(0, total);
+#else
+		// TODO: for other OSes
+#endif
 }
 
 void MainWindow::onQueueProgress(int current, int total)
 {
-	updateProgress(current);
+	m_progressTotal->setValue(current);
+
+#ifdef Q_OS_WIN32
+		QWinTaskbarProgress* progress = m_button->progress();
+
+		// progress
+		progress->setValue(current);
+#else
+	// TODO: for other OSes
+#endif
 }
 
 void MainWindow::onQueueFinished(bool aborted)
 {
+
+#ifdef Q_OS_WIN32
+	QWinTaskbarProgress* progress = m_button->progress();
+
+	// end
+	progress->hide();
+#else
+	// TODO: for other OSes
+#endif
+
 	if (!aborted)
 	{
 		// remove current batch if any
