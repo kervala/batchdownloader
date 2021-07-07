@@ -34,7 +34,8 @@ DownloadEntry::DownloadEntry():reply(NULL), method(Method::Get), offset(0), coun
 DownloadEntry::DownloadEntry(const DownloadEntry& entry) : reply(nullptr), url(entry.url), filename(entry.filename),
 referer(entry.referer), method(entry.method), headers(entry.headers), parameters(entry.parameters),
 offset(entry.offset), offsetParameter(entry.offsetParameter), count(entry.count), countParameter(entry.countParameter),
-type(entry.type), error(entry.error), data(entry.data), time(entry.time), fileoffset(entry.fileoffset), filesize(entry.filesize),
+type(entry.type), error(entry.error), data(entry.data), time(entry.time), downloadStart(entry.downloadStart),
+fileoffset(entry.fileoffset), filesize(entry.filesize),
 supportsAcceptRanges(entry.supportsAcceptRanges), supportsContentRange(entry.supportsContentRange),
 fullPath(entry.fullPath), file(entry.file)
 {
@@ -75,6 +76,7 @@ DownloadEntry& DownloadEntry::operator = (const DownloadEntry &entry)
 	type = entry.type;
 	error = entry.error;
 	time = entry.time;
+	downloadStart = entry.downloadStart;
 
 	fileoffset = entry.fileoffset;
 	filesize = entry.filesize;
@@ -105,6 +107,7 @@ void DownloadEntry::reset()
 	type = 0;
 	error.clear();
 	time = QDateTime();
+	downloadStart = QDateTime();
 
 	fileoffset = 0;
 	filesize = 0;

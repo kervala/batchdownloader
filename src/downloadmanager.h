@@ -67,6 +67,7 @@ struct DownloadEntry
 	QString error;
 	QString data;
 	QDateTime time;
+	QDateTime downloadStart;
 
 	qint64 fileoffset;
 	qint64 filesize;
@@ -112,7 +113,7 @@ signals:
 	void downloadQueued(const QString &file);
 	void downloadStarted(const DownloadEntry& entry);
 	void downloadStop(const DownloadEntry& entry);
-	void downloadProgress(int current, int total);
+	void downloadProgress(qint64 current, qint64 total, int speed); // speed is in kiB/s
 	void downloadSucceeded(const QByteArray &data, const DownloadEntry &entry);
 	void downloadRedirected(const QString &url, const DownloadEntry& entry);
 	void downloadFailed(const QString &error, const DownloadEntry &entry);
