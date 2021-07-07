@@ -772,12 +772,6 @@ bool DownloadManager::loadCookiesFromFile(const QString& filename, const QString
 	return true;
 }
 
-
-void DownloadManager::setAllAtOnce(bool all)
-{
-	m_allAtOnce = all;
-}
-
 void DownloadManager::setStopOnError(bool stop)
 {
 	m_stopOnError = stop;
@@ -1123,7 +1117,7 @@ void DownloadManager::onHeadFinished()
 
 					removeFromQueue(entry);
 
-					if (!m_allAtOnce) downloadNextFile();
+					downloadNextFile();
 
 					return;
 				}
@@ -1263,16 +1257,15 @@ void DownloadManager::onPostFinished()
 					// use same parameters
 					DownloadEntry* next = new DownloadEntry(*entry);
 
-					// increase offset
-					++next->offset;
+			removeFromQueue(entry);
+
+			downloadNextFile();
 
 					m_entries << next;
 				}
 
-				removeFromQueue(reply);
-
-				if (!m_allAtOnce) downloadNextFile();
-			}
+		case 407:
+			// ask authorization
 			break;
 
 		default:
