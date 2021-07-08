@@ -24,6 +24,7 @@
 
 #include "functions.h"
 #include "downloadmanager.h"
+#include "downloadentry.h"
 
 #include <QtWidgets/QFileDialog>
 

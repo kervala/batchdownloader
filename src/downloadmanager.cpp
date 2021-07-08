@@ -20,138 +20,14 @@
 #include "common.h"
 #include "downloadmanager.h"
 #include "moc_downloadmanager.cpp"
+
 #include "functions.h"
+#include "downloadentry.h"
 #include "qzipreader.h"
 
 #ifdef DEBUG_NEW
 #define new DEBUG_NEW
 #endif
-
-DownloadEntry::DownloadEntry():reply(NULL), method(Method::Get), offset(0), count(0), type(0), fileoffset(0), filesize(0), supportsAcceptRanges(false), supportsContentRange(false), file(nullptr)
-{
-}
-
-DownloadEntry::DownloadEntry(const DownloadEntry& entry) : reply(nullptr), url(entry.url), filename(entry.filename),
-referer(entry.referer), method(entry.method), headers(entry.headers), parameters(entry.parameters),
-offset(entry.offset), offsetParameter(entry.offsetParameter), count(entry.count), countParameter(entry.countParameter),
-type(entry.type), error(entry.error), data(entry.data), time(entry.time), downloadStart(entry.downloadStart),
-fileoffset(entry.fileoffset), filesize(entry.filesize),
-supportsAcceptRanges(entry.supportsAcceptRanges), supportsContentRange(entry.supportsContentRange),
-fullPath(entry.fullPath), file(entry.file)
-{
-}
-
-DownloadEntry::~DownloadEntry()
-{
-	if (reply)
-	{
-		reply->deleteLater();
-	}
-
-	closeFile();
-}
-
-bool DownloadEntry::operator == (const DownloadEntry &entry) const
-{
-	return url == entry.url && method == entry.method && parameters == entry.parameters && offset == entry.offset && count == entry.count;
-}
-
-DownloadEntry& DownloadEntry::operator = (const DownloadEntry &entry)
-{
-	reply = nullptr;
-	url = entry.url;
-	filename = entry.filename;
-	referer = entry.referer;
-	method = entry.method;
-	headers = entry.headers;
-	parameters = entry.parameters;
-	offset = entry.offset;
-	offsetParameter = entry.offsetParameter;
-	count = entry.count;
-	countParameter = entry.countParameter;
-	type = entry.type;
-	error = entry.error;
-	time = entry.time;
-	downloadStart = entry.downloadStart;
-
-	fileoffset = entry.fileoffset;
-	filesize = entry.filesize;
-
-	supportsAcceptRanges = entry.supportsAcceptRanges;
-	supportsContentRange = entry.supportsContentRange;
-
-	fullPath = entry.fullPath;
-
-	file = nullptr;
-
-	return *this;
-}
-
-void DownloadEntry::reset()
-{
-	reply = nullptr;
-	url.clear();
-	filename.clear();
-	referer.clear();
-	method = Method::None;
-	headers.clear();
-	parameters.clear();
-	offset = 0;
-	offsetParameter.clear();
-	count = 0;
-	countParameter.clear();
-	type = 0;
-	error.clear();
-	time = QDateTime();
-	downloadStart = QDateTime();
-
-	fileoffset = 0;
-	filesize = 0;
-
-	supportsAcceptRanges = false;
-	supportsContentRange = false;;
-
-	fullPath.clear();
-
-	file = nullptr;
-}
-
-bool DownloadEntry::checkDownloadedFile() const
-{
-	QFileInfo file(fullPath);
-
-	return file.size() == filesize && file.lastModified().toUTC() == time;
-}
-
-bool DownloadEntry::openFile()
-{
-	if (fullPath.isEmpty()) return false;
-
-	closeFile();
-
-	file.reset(new QFile(fullPath));
-
-	if (file->open(QFile::Append)) return true;
-
-	closeFile();
-
-	return false;
-}
-
-void DownloadEntry::closeFile()
-{
-	if (!file) return;
-
-	file->flush();
-	file->close();
-
-	file.clear();
-}
-
-bool DownloadEntry::supportsResume() const
-{
-	return supportsAcceptRanges && supportsContentRange;
-}
 
 DownloadManager::DownloadManager(QObject *parent) : QObject(parent), m_mustStop(false), m_stopOnError(true), m_stopOnExpired(false), m_queueInitialSize(0)
 {

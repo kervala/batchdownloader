@@ -23,61 +23,11 @@
 class QNetworkAccessManager;
 class QTimer;
 class QAuthenticator;
+struct DownloadEntry;
 
 #ifndef COMMON_EXPORT
 #define COMMON_EXPORT
 #endif
-
-struct DownloadEntry
-{
-	enum class Method
-	{
-		None,
-		Get, // for small files
-		Head, // for big files
-		Post // for forms
-	};
-
-	DownloadEntry();
-	DownloadEntry(const DownloadEntry &entry);
-	~DownloadEntry();
-
-	bool operator == (const DownloadEntry &entry) const;
-	DownloadEntry& operator = (const DownloadEntry &entry);
-
-	void reset();
-	bool checkDownloadedFile() const;
-	bool supportsResume() const;
-
-	bool openFile();
-	void closeFile();
-
-	QNetworkReply *reply;
-	QString url;
-	QString filename;
-	QString referer;
-	Method method;
-	QMap<QString, QString> headers;
-	QMap<QString, QString> parameters;
-	int offset;
-	QString offsetParameter;
-	int count;
-	QString countParameter;
-	int type; // custom type of request
-	QString error;
-	QString data;
-	QDateTime time;
-	QDateTime downloadStart;
-
-	qint64 fileoffset;
-	qint64 filesize;
-
-	bool supportsAcceptRanges;
-	bool supportsContentRange;
-
-	QString fullPath;
-	QSharedPointer<QFile> file; // for head
-};
 
 class COMMON_EXPORT DownloadManager : public QObject
 {
