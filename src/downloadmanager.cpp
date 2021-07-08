@@ -487,6 +487,8 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 			// start download
 			entry->downloadStart = QDateTime::currentDateTime();
 
+			emit downloadStarted(*entry);
+
 			reply = m_manager->get(request);
 
 			connect(reply, &QNetworkReply::finished, this, &DownloadManager::onGetFinished);
@@ -507,8 +509,6 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 	}
 
 	entry->reply = reply;
-
-	emit downloadStarted(*entry);
 
 	connect(reply, static_cast<void (QNetworkReply::*)(QNetworkReply::NetworkError)>(&QNetworkReply::errorOccurred), this, &DownloadManager::onReplyError);
 
