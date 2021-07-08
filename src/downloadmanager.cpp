@@ -414,39 +414,41 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 		if (entry->method == DownloadEntry::Method::Head)
 		{
-			if (entry->supportsAcceptRanges)
-			{
-				QFileInfo fileInfo(entry->fullPath);
+			QFileInfo fileInfo(entry->fullPath);
 
-				if (fileInfo.exists())
+			if (fileInfo.exists())
+			{
+				entry->fileoffset = fileInfo.size();
+			}
+			else
+			{
+				entry->fileoffset = 0;
+			}
+
+			// continue if offset less than size
+			if (entry->fileoffset >= entry->filesize)
+			{
+				if (entry->checkDownloadedFile())
 				{
-					entry->fileoffset = fileInfo.size();
+					emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
 				}
 				else
 				{
-					entry->fileoffset = 0;
+					// or has wrong size
+					emit downloadInfo(tr("File %1 is larher than expected").arg(entry->filename), *entry);
 				}
 
-				// continue if offset less than size
-				if (entry->fileoffset >= entry->filesize)
-				{
-					if (entry->checkDownloadedFile())
-					{
-						emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
-					}
-					else
-					{
-						// or has wrong size
-						emit downloadInfo(tr("File %1 is larher than expected").arg(entry->filename), *entry);
-					}
-
-					return true;
-				}
+				return true;
 			}
 
+			// if supports accept range, check if we need to resume
 			if (entry->supportsAcceptRanges)
 			{
-				request.setRawHeader("Range", QString("bytes=%1-").arg(entry->fileoffset).toLatin1());
+				// only try to resume if file partially downloaded
+				if (entry->fileoffset > 0)
+				{
+					request.setRawHeader("Range", QString("bytes=%1-").arg(entry->fileoffset).toLatin1());
+				}
 			}
 
 			reply = m_manager->head(request);
@@ -455,31 +457,45 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 		}
 		else
 		{
-			if (!entry->fullPath.isEmpty() && !entry->file)
+			if (!entry->fullPath.isEmpty())
 			{
-				QString directory = QFileInfo(entry->fullPath).absolutePath();
-
-				// create directory if not exists
-				if (!QFile::exists(directory)) QDir().mkpath(directory);
-
-				if (getFreeDiskSpace(directory) < entry->filesize)
+				if (entry->checkDownloadedFile())
 				{
-					emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
+					emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
 
-					stop();
-
-					return false;
+					return true;
 				}
 
-				if (!entry->openFile())
+				if (!entry->file)
 				{
-					qDebug() << "Unable to write file";
+					QString directory = QFileInfo(entry->fullPath).absolutePath();
 
+					// create directory if not exists
+					if (!QFile::exists(directory)) QDir().mkpath(directory);
+
+					if (getFreeDiskSpace(directory) < entry->filesize)
+					{
+						emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
+
+						stop();
+
+						return false;
+					}
+
+					if (!entry->openFile())
+					{
+						emit downloadError(tr("Unable to write file"), *entry);
+
+						return false;
+					}
+				}
+				else
+				{
 					return false;
 				}
 			}
 
-			if (entry->supportsResume())
+			if (entry->supportsResume() && entry->fileoffset > 0)
 			{
 				request.setRawHeader("Range", QString("bytes=%1-%2").arg(entry->fileoffset).arg(entry->filesize - 1).toLatin1());
 			}
@@ -826,20 +842,27 @@ void DownloadManager::processContentDisposition(DownloadEntry *entry, const QStr
 
 void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& acceptRanges)
 {
-	if (!entry->supportsAcceptRanges && acceptRanges == "bytes")
+	// if file is partially downloaded
+	if (entry->fileoffset > 0)
 	{
-		emit downloadInfo(tr("Server supports resume"), *entry);
+		if (!entry->supportsAcceptRanges && acceptRanges == "bytes")
+		{
+			emit downloadInfo(tr("Server supports resume"), *entry);
 
-		// server supports resume, part 1
-		entry->supportsAcceptRanges = true;
+			// server supports resume, part 1
+			entry->supportsAcceptRanges = true;
+		}
+		else
+		{
+			// server doesn't support resume or
+			// we requested range, but server always returns 200
+			// download from the beginning
+			emit downloadWarning(tr("Server doesn't support resume"), *entry);
+		}
 	}
-	else
-	{
-		// server doesn't support resume or
-		// we requested range, but server always returns 200
-		// download from the beginning
-		emit downloadWarning(tr("Server doesn't support resume"), *entry);
 
+	if (!entry->supportsAcceptRanges)
+	{
 		entry->method = DownloadEntry::Method::Get;
 	}
 
@@ -849,7 +872,7 @@ void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& a
 
 void DownloadManager::processContentRange(DownloadEntry *entry, const QString &contentRange, qint64 contentLength)
 {
-	// server supports resume
+	// server supports resume, part 2
 	QRegularExpression reg("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
 
 	entry->fileoffset = 0;
@@ -878,6 +901,8 @@ void DownloadManager::processContentRange(DownloadEntry *entry, const QString &c
 		else
 		{
 			emit downloadWarning(tr("Unable to parse %1").arg(contentRange), *entry);
+
+			entry->filesize = contentLength;
 		}
 	}
 	else
