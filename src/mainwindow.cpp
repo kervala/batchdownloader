@@ -632,9 +632,6 @@ void MainWindow::downloadNextBatch()
 		m_progressTotal->setMaximum(lastSpinBox->value());
 	}
 
-	// start download
-	downloadButton->setText(tr("Stop"));
-
 	QString url = m_urlFormat;
 
 	int first = firstSpinBox->value();
