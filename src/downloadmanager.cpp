@@ -48,7 +48,7 @@ DownloadManager::DownloadManager(QObject *parent) : QObject(parent), m_mustStop(
 
 DownloadManager::~DownloadManager()
 {
-	stop();
+	reset();
 }
 
 int DownloadManager::count() const
