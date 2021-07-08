@@ -741,7 +741,7 @@ void DownloadManager::processRedirection(DownloadEntry* entry, const QString& re
 
 	if (!newUrl.isEmpty())
 	{
-		qDebug() << "redirected from" << entry->url << "to" << newUrl;
+		emit downloadRedirected(newUrl, *entry);
 
 		// use same parameters
 		entry->referer = entry->url;
