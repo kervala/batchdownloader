@@ -769,29 +769,38 @@ void DownloadManager::processContentDisposition(DownloadEntry *entry, const QStr
 {
 	if (contentDisposition.isEmpty()) return;
 
+	QString asciiFilename;
+
+	// both ASCII and UTF-8 filenames
 	QRegularExpression reg("^attachment; filename=\"([a-zA-Z0-9._-]+)\"; filename\\*=utf-8''([a-zA-Z0-9._-]+)$");
 
 	QRegularExpressionMatch match = reg.match(contentDisposition);
 
 	if (match.hasMatch())
 	{
-		QString asciiFilename = match.captured(1);
+		asciiFilename = match.captured(1);
+
 		QString utf8Filename = match.captured(2);
 
 		if (asciiFilename != utf8Filename)
 		{
 			emit downloadWarning(tr("UTF-8 and ASCII filenames are different (ASCII = '%1', UTF-8 = '%2')").arg(asciiFilename).arg(utf8Filename), *entry);
 		}
+	}
+	else
+	{
+		// ASCII filename
+		reg.setPattern("^attachment; filename=\"([a-zA-Z0-9._-]+)\"$");
 
-		// always use filename from content-disposition
-		entry->filename = asciiFilename;
+		match = reg.match(contentDisposition);
+
+		if (match.hasMatch())
+		{
+			asciiFilename = match.captured(1);
+		}
 	}
 
-	reg.setPattern("^attachment; filename=\"([a-zA-Z0-9._-]+)\"$");
-
-	match = reg.match(contentDisposition);
-
-	if (match.hasMatch())
+	if (entry->filename != asciiFilename)
 	{
 		emit downloadWarning(tr("Attachment filenames is different (original = '%1', attachment = '%2')").arg(entry->filename).arg(asciiFilename), *entry);
 
