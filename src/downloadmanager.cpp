@@ -699,11 +699,23 @@ void DownloadManager::onProgress(qint64 done, qint64 total)
 
 	if (entry)
 	{
-		int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+		qint64 current = entry->fileoffset + done;
+		qint64 size = entry->fileoffset + total;
 
-		int speed = seconds > 0 ? done / seconds / 1024 : 0;
+		qint64 percent = current * 100 / size;
 
-		emit downloadProgress(entry->fileoffset + done, entry->fileoffset + total, speed);
+		static int s_percent = 0;
+
+		if (percent != s_percent)
+		{
+			int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+
+			int speed = seconds > 0 ? done / seconds / 1024 : 0;
+
+			emit downloadProgress(current, size, speed);
+		}
+
+		s_percent = percent;
 	}
 
 	if (m_mustStop)
