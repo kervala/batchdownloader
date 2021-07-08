@@ -782,7 +782,7 @@ void MainWindow::onDownloadSaved(const DownloadEntry& entry)
 
 void MainWindow::onDownloadInfo(const QString& info, const DownloadEntry& entry)
 {
-	printWarning(info);
+	printInfo(info);
 }
 
 void MainWindow::onDownloadWarning(const QString& warning, const DownloadEntry& entry)
