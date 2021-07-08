@@ -414,40 +414,41 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 		if (entry->method == DownloadEntry::Method::Head)
 		{
-			QFileInfo fileInfo(entry->fullPath);
-
-			if (fileInfo.exists())
+			// resume part 1
+			if (entry->fileoffset > 0 && entry->filesize > 0 && entry->supportsAcceptRanges)
 			{
-				entry->fileoffset = fileInfo.size();
+				// if supports accept range, check if we need to resume
+				// only try to resume if file partially downloaded
+				request.setRawHeader("Range", QString("bytes=%1-").arg(entry->fileoffset).toLatin1());
 			}
 			else
 			{
-				entry->fileoffset = 0;
-			}
+				// check if file already at least partially downloaded
+				QFileInfo fileInfo(entry->fullPath);
 
-			// continue if offset less than size
-			if (entry->fileoffset >= entry->filesize)
-			{
-				if (entry->checkDownloadedFile())
+				if (fileInfo.exists())
 				{
-					emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
+					entry->fileoffset = fileInfo.size();
+
+					// continue if offset less than size
+					if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
+					{
+						if (entry->checkDownloadedFile())
+						{
+							emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
+						}
+						else
+						{
+							// or has wrong size
+							emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
+						}
+
+						return true;
+					}
 				}
 				else
 				{
-					// or has wrong size
-					emit downloadInfo(tr("File %1 is larher than expected").arg(entry->filename), *entry);
-				}
-
-				return true;
-			}
-
-			// if supports accept range, check if we need to resume
-			if (entry->supportsAcceptRanges)
-			{
-				// only try to resume if file partially downloaded
-				if (entry->fileoffset > 0)
-				{
-					request.setRawHeader("Range", QString("bytes=%1-").arg(entry->fileoffset).toLatin1());
+					entry->fileoffset = 0;
 				}
 			}
 
