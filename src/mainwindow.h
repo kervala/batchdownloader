@@ -66,8 +66,12 @@ public slots:
 
 	void onDownloadStarted(const DownloadEntry& entry);
 	void onDownloadProgress(qint64 done, qint64 total, int speed);
-	void onDownloadFailed(const QString& error, const DownloadEntry& entry);
+	void onDownloadSucceeded(const QByteArray& data, const DownloadEntry& entry);
+	void onDownloadSaved(const DownloadEntry& entry);
+
+	void onDownloadInfo(const QString& info, const DownloadEntry& entry);
 	void onDownloadWarning(const QString& warning, const DownloadEntry& entry);
+	void onDownloadError(const QString& error, const DownloadEntry& entry);
 
 protected:
 	void showEvent(QShowEvent *e);

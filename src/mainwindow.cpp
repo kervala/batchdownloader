@@ -49,15 +49,14 @@ MainWindow::MainWindow():QMainWindow()
 
 	connect(m_manager, &DownloadManager::downloadStarted, this, &MainWindow::onDownloadStarted);
 	connect(m_manager, &DownloadManager::downloadProgress, this, &MainWindow::onDownloadProgress);
-	connect(m_manager, &DownloadManager::downloadFailed, this, &MainWindow::onDownloadFailed);
-	connect(m_manager, &DownloadManager::downloadWarning, this, &MainWindow::onDownloadWarning);
+	connect(m_manager, &DownloadManager::downloadSucceeded, this, &MainWindow::onDownloadSucceeded);
+	connect(m_manager, &DownloadManager::downloadSaved, this, &MainWindow::onDownloadSaved);
 
-/*
-	void downloadStarted(const DownloadEntry & entry);
-	void downloadSucceeded(const QByteArray & data, const QDateTime & lastModified, const DownloadEntry & entry);
-	void downloadRedirected(const QString & url, const QDateTime & lastModified, const DownloadEntry & entry);
-	void downloadSaved(const DownloadEntry & entry);
-*/
+	connect(m_manager, &DownloadManager::downloadInfo, this, &MainWindow::onDownloadInfo);
+	connect(m_manager, &DownloadManager::downloadWarning, this, &MainWindow::onDownloadWarning);
+	connect(m_manager, &DownloadManager::downloadError, this, &MainWindow::onDownloadError);
+
+	// void downloadRedirected(const QString & url, const QDateTime & lastModified, const DownloadEntry & entry);
 
 	m_fileLabel = new QLabel(this);
 	m_fileLabel->setMinimumSize(QSize(500, 12));
@@ -760,26 +759,44 @@ void MainWindow::onQueueFinished(bool aborted)
 void MainWindow::onDownloadStarted(const DownloadEntry& entry)
 {
 	m_fileLabel->setText(entry.url);
+
+	printInfo(tr("Start downloading: %1").arg(entry.url));
 }
 
 void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
 {
 	m_progressCurrent->setValue(total > 0 ? done * 100 / total:0);
+
 	m_speedLabel->setText(tr("%1 KiB/s").arg(speed));
 }
 
-void MainWindow::onDownloadFailed(const QString& error, const DownloadEntry& entry)
+void MainWindow::onDownloadSucceeded(const QByteArray& data, const DownloadEntry& entry)
 {
-	printError(tr("%1: %2").arg(entry.url).arg(error));
+	printInfo(tr("Download succeeded"));
+}
 
-	downloadButton->setText(tr("Download"));
+void MainWindow::onDownloadSaved(const DownloadEntry& entry)
+{
+	printInfo(tr("File %1 saved").arg(entry.filename));
+}
 
-	restoreCurrent();
+void MainWindow::onDownloadInfo(const QString& info, const DownloadEntry& entry)
+{
+	printWarning(info);
 }
 
 void MainWindow::onDownloadWarning(const QString& warning, const DownloadEntry& entry)
 {
-	printWarning(tr("%1: %2").arg(entry.url).arg(warning));
+	printWarning(warning);
+}
+
+void MainWindow::onDownloadError(const QString& error, const DownloadEntry& entry)
+{
+	printError(error);
+
+	downloadButton->setText(tr("Download"));
+
+	restoreCurrent();
 }
 
 void MainWindow::printLog(const QString &style, const QString &str)

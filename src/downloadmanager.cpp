@@ -78,7 +78,7 @@ bool DownloadManager::saveFile(DownloadEntry* entry, const QByteArray &data)
 
 		if (getFreeDiskSpace(directory) < data.size())
 		{
-			emit downloadFailed(tr("Not enough disk space to save %1").arg(directory), *entry);
+			emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
 
 			stop();
 
@@ -432,13 +432,12 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 				{
 					if (entry->checkDownloadedFile())
 					{
-//						emit downloadDone();
-						qDebug() << "File is complete";
+						emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
 					}
 					else
 					{
 						// or has wrong size
-						qDebug() << "File is larger than expected";
+						emit downloadInfo(tr("File %1 is larher than expected").arg(entry->filename), *entry);
 					}
 
 					return true;
@@ -463,9 +462,9 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 				// create directory if not exists
 				if (!QFile::exists(directory)) QDir().mkpath(directory);
 
-				if (getFreeDiskSpace(directory) < (entry->filesize - entry->fileoffset))
+				if (getFreeDiskSpace(directory) < entry->filesize)
 				{
-					emit downloadFailed(tr("Not enough disk space to save %1").arg(directory), *entry);
+					emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
 
 					stop();
 
@@ -762,7 +761,7 @@ void DownloadManager::processRedirection(DownloadEntry* entry, const QString& re
 
 void DownloadManager::processError(DownloadEntry* entry, const QString& error)
 {
-	emit downloadFailed(error, *entry);
+	emit downloadError(error, *entry);
 
 	removeFromQueue(entry);
 
@@ -825,7 +824,7 @@ void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& a
 {
 	if (!entry->supportsAcceptRanges && acceptRanges == "bytes")
 	{
-		qDebug() << "Server supports resume for" << entry->url;
+		emit downloadInfo(tr("Server supports resume"), *entry);
 
 		// server supports resume, part 1
 		entry->supportsAcceptRanges = true;
@@ -835,7 +834,7 @@ void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& a
 		// server doesn't support resume or
 		// we requested range, but server always returns 200
 		// download from the beginning
-		qDebug() << "Server doesn't support resume, download" << entry->url << "from the beginning";
+		emit downloadWarning(tr("Server doesn't support resume"), *entry);
 
 		entry->method = DownloadEntry::Method::Get;
 	}
@@ -861,9 +860,16 @@ void DownloadManager::processContentRange(DownloadEntry *entry, const QString &c
 			entry->fileoffset = match.captured(1).toLongLong();
 
 			// when resuming, Content-Length is the size of missing parts to download
-			entry->filesize = match.captured(3).toLongLong();
+			qint64 filesize = match.captured(3).toLongLong() + entry->fileoffset;
 
-			qDebug() << "Server supports resume for" << entry->url << ":" << entry->fileoffset << "/" << entry->filesize;
+			if (entry->filesize && entry->filesize != filesize)
+			{
+				emit downloadWarning(tr("File sizes are different: %1 (Content-Length) / %2 (Content-Range)").arg(entry->filesize).arg(filesize), *entry);
+			}
+
+			entry->filesize = filesize;
+
+			emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(filesize), *entry);
 		}
 		else
 		{
@@ -956,16 +962,21 @@ void DownloadManager::onGetFinished()
 			{
 				entry->closeFile();
 
-				qint64 filesize = QFileInfo(entry->fullPath).size();
-
-				if (filesize != entry->filesize)
+				if (entry->filesize)
 				{
-					processError(entry, tr("File %1 has a wrong size (%2 received / %3 expected)").arg(entry->fullPath).arg(filesize).arg(entry->filesize));
+					qint64 filesize = QFileInfo(entry->fullPath).size();
 
-					return;
+					if (filesize != (entry->filesize + entry->fileoffset))
+					{
+						processError(entry, tr("File %1 has a wrong size (%2 received / %3 expected)").arg(entry->fullPath).arg(filesize).arg(entry->filesize));
+
+						return;
+					}
 				}
 
 				setFileModificationDate(entry->fullPath, lastModified);
+
+				emit downloadSaved(*entry);
 			}
 			else
 			{
