@@ -215,9 +215,9 @@ void DownloadManager::start()
 {
 	m_queueInitialSize = m_entries.size();;
 
-	downloadNextFile();
-
 	emit queueStarted(m_queueInitialSize);
+
+	downloadNextFile();
 }
 
 void DownloadManager::stop()
