@@ -780,7 +780,7 @@ void DownloadManager::processContentDisposition(DownloadEntry *entry, const QStr
 
 		if (asciiFilename != utf8Filename)
 		{
-			qDebug() << "UTF-8 and ASCII filenames are different";
+			emit downloadWarning(tr("UTF-8 and ASCII filenames are different (ASCII = '%1', UTF-8 = '%2')").arg(asciiFilename).arg(utf8Filename), *entry);
 		}
 
 		// always use filename from content-disposition
@@ -793,7 +793,7 @@ void DownloadManager::processContentDisposition(DownloadEntry *entry, const QStr
 
 	if (match.hasMatch())
 	{
-		QString asciiFilename = match.captured(1);
+		emit downloadWarning(tr("Attachment filenames is different (original = '%1', attachment = '%2')").arg(entry->filename).arg(asciiFilename), *entry);
 
 		// always use filename from content-disposition
 		entry->filename = asciiFilename;

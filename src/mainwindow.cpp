@@ -50,6 +50,7 @@ MainWindow::MainWindow():QMainWindow()
 	connect(m_manager, &DownloadManager::downloadStarted, this, &MainWindow::onDownloadStarted);
 	connect(m_manager, &DownloadManager::downloadProgress, this, &MainWindow::onDownloadProgress);
 	connect(m_manager, &DownloadManager::downloadFailed, this, &MainWindow::onDownloadFailed);
+	connect(m_manager, &DownloadManager::downloadWarning, this, &MainWindow::onDownloadWarning);
 
 /*
 	void downloadStarted(const DownloadEntry & entry);
