@@ -991,7 +991,7 @@ void DownloadManager::onGetFinished()
 					}
 				}
 
-				setFileModificationDate(entry->fullPath, lastModified);
+				setFileModificationDate(entry->fullPath, entry->time);
 
 				emit downloadSaved(*entry);
 			}
