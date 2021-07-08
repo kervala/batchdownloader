@@ -115,9 +115,11 @@ void DownloadEntry::reset()
 
 bool DownloadEntry::checkDownloadedFile() const
 {
+	if (fullPath.isEmpty()) return false;
+
 	QFileInfo file(fullPath);
 
-	return file.size() == filesize && file.lastModified().toUTC() == time;
+	return file.exists() && file.size() > 0 && file.size() == filesize && file.lastModified().toUTC() == time;
 }
 
 bool DownloadEntry::openFile()
