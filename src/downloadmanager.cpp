@@ -750,6 +750,10 @@ void DownloadManager::processRedirection(DownloadEntry* entry, const QString& re
 		// redirection on another server, recheck resume
 		entry->supportsAcceptRanges = false;
 		entry->supportsContentRange = false;
+
+		entry->fileoffset = 0;
+		entry->filesize = 0;
+		entry->time = QDateTime();
 	}
 	else
 	{
@@ -843,7 +847,7 @@ void DownloadManager::processAcceptRanges(DownloadEntry* entry, const QString& a
 	downloadEntry(entry);
 }
 
-void DownloadManager::processContentRange(DownloadEntry *entry, const QString &contentRange)
+void DownloadManager::processContentRange(DownloadEntry *entry, const QString &contentRange, qint64 contentLength)
 {
 	// server supports resume
 	QRegularExpression reg("^bytes ([0-9]+)-([0-9]+)/([0-9]+)$");
@@ -860,7 +864,7 @@ void DownloadManager::processContentRange(DownloadEntry *entry, const QString &c
 			entry->fileoffset = match.captured(1).toLongLong();
 
 			// when resuming, Content-Length is the size of missing parts to download
-			qint64 filesize = match.captured(3).toLongLong() + entry->fileoffset;
+			qint64 filesize = match.captured(3).toLongLong();
 
 			if (entry->filesize && entry->filesize != filesize)
 			{
@@ -875,6 +879,10 @@ void DownloadManager::processContentRange(DownloadEntry *entry, const QString &c
 		{
 			emit downloadWarning(tr("Unable to parse %1").arg(contentRange), *entry);
 		}
+	}
+	else
+	{
+		entry->filesize = contentLength;
 	}
 
 	entry->method = DownloadEntry::Method::Get;
@@ -898,6 +906,8 @@ void DownloadManager::onGetFinished()
 	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
 	QNetworkReply::NetworkError error = reply->error();
 	QString url = reply->url().toString();
+
+	qint64 size = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
 
 	DownloadEntry* entry = findEntryByNetworkReply(reply);
 	Q_ASSERT(entry != nullptr);
@@ -951,13 +961,20 @@ void DownloadManager::onGetFinished()
 	}
 	else
 	{
+		entry->time = lastModified;
+
+		if (entry->filesize == 0 && size > 0)
+		{
+			entry->filesize = size;
+		}
+
+		processContentDisposition(entry, contentDisposition);
+
 		switch (statusCode)
 		{
 		case 200:
 		case 206:
 		{
-			processContentDisposition(entry, contentDisposition);
-
 			if (entry->file)
 			{
 				entry->closeFile();
@@ -966,7 +983,7 @@ void DownloadManager::onGetFinished()
 				{
 					qint64 filesize = QFileInfo(entry->fullPath).size();
 
-					if (filesize != (entry->filesize + entry->fileoffset))
+					if (filesize != entry->filesize)
 					{
 						processError(entry, tr("File %1 has a wrong size (%2 received / %3 expected)").arg(entry->fullPath).arg(filesize).arg(entry->filesize));
 
@@ -1073,7 +1090,11 @@ void DownloadManager::onHeadFinished()
 	else
 	{
 		entry->time = lastModified;
-		entry->filesize = size;
+
+		if (entry->filesize == 0 && size > 0)
+		{
+			entry->filesize = size;
+		}
 
 		processContentDisposition(entry, contentDisposition);
 
@@ -1105,7 +1126,7 @@ void DownloadManager::onHeadFinished()
 
 		case 206:
 		{
-			processContentRange(entry, contentRange);
+			processContentRange(entry, contentRange, size);
 
 			break;
 		}

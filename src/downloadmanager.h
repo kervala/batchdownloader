@@ -110,7 +110,7 @@ private:
 	void processError(DownloadEntry* entry, const QString& error);
 	void processContentDisposition(DownloadEntry* entry, const QString& contentDisposition);
 	void processAcceptRanges(DownloadEntry* entry, const QString& acceptRanges);
-	void processContentRange(DownloadEntry* entry, const QString& contentRange);
+	void processContentRange(DownloadEntry* entry, const QString& contentRange, qint64 contentLength);
 
 	QNetworkAccessManager *m_manager;
 	bool m_mustStop;
