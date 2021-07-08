@@ -770,7 +770,7 @@ void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
 
 void MainWindow::onDownloadFailed(const QString& error, const DownloadEntry& entry)
 {
-	printError(tr("Error HTTP %1: %2").arg(entry.url).arg(error));
+	printError(tr("%1: %2").arg(entry.url).arg(error));
 
 	downloadButton->setText(tr("Download"));
 
