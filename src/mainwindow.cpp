@@ -777,6 +777,11 @@ void MainWindow::onDownloadFailed(const QString& error, const DownloadEntry& ent
 	restoreCurrent();
 }
 
+void MainWindow::onDownloadWarning(const QString& warning, const DownloadEntry& entry)
+{
+	printWarning(tr("%1: %2").arg(entry.url).arg(warning));
+}
+
 void MainWindow::printLog(const QString &style, const QString &str)
 {
 	logsTextEdit->append(QString("<div class='%1'>%2</div>").arg(style).arg(str));
