@@ -90,7 +90,6 @@ protected:
 	void printInfo(const QString &str);
 	void printWarning(const QString &str);
 	void printError(const QString &str);
-	void updateProgress(int currentFile);
 
 	bool loadCSV(const QString& file);
 	bool saveCSV(const QString& file) const;
