@@ -169,13 +169,20 @@ void DownloadManager::onAuthentication(const QNetworkProxy &/* proxy */, QAuthen
 
 void DownloadManager::onReplyError(QNetworkReply::NetworkError error)
 {
-	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+ 	QNetworkReply* reply = qobject_cast<QNetworkReply*>(sender());
+	Q_ASSERT(reply != nullptr);
 
-	qDebug() << "Network error when downloading" << reply->errorString();
+	DownloadEntry* entry = findEntryByNetworkReply(reply);
+	Q_ASSERT(entry != nullptr);
 
 	if (error == QNetworkReply::OperationCanceledError)
 	{
-		//m_listener->operationStop();
+		emit downloadWarning(tr("Server canceled the download, trying to resume..."), *entry);
+
+	}
+	else
+	{
+		emit downloadWarning(tr("Server sent an error: %1").arg(error), *entry);
 	}
 }
 
@@ -279,7 +286,7 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 	if (entry->reply)
 	{
 		entry->reply->deleteLater();
-		entry->reply = NULL;
+		entry->reply = nullptr;
 	}
 
 	if (m_mustStop)
@@ -492,7 +499,35 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 				}
 				else
 				{
-					return false;
+					// check if file already at least partially downloaded
+					QFileInfo fileInfo(entry->fullPath);
+
+					if (fileInfo.exists())
+					{
+						entry->fileoffset = fileInfo.size();
+
+						// continue if offset less than size
+						if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
+						{
+							if (entry->checkDownloadedFile())
+							{
+								emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
+							}
+							else
+							{
+								// or has wrong size
+								emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
+							}
+
+							return true;
+						}
+					}
+					else
+					{
+						entry->fileoffset = 0;
+					}
+
+					emit downloadWarning(tr("File not closed, resuming..."), *entry);
 				}
 			}
 
@@ -931,6 +966,7 @@ void DownloadManager::onGetFinished()
 	QDateTime lastModified = reply->header(QNetworkRequest::LastModifiedHeader).toDateTime();
 	QString redirection = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
 	QNetworkReply::NetworkError error = reply->error();
+	QString errorString = reply->errorString();
 	QString url = reply->url().toString();
 
 	qint64 size = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
@@ -958,9 +994,21 @@ void DownloadManager::onGetFinished()
 
 	if (error != QNetworkReply::NoError)
 	{
-		if ((error == QNetworkReply::OperationCanceledError) || (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired))
+		if (error == QNetworkReply::OperationCanceledError && !m_stopOnError)
 		{
-			// connection expired or aborted
+			emit downloadError(tr("Download canceled by server or user: %1").arg(errorString), *entry);
+
+			// retry with head to resume download
+			entry->method = DownloadEntry::Method::Head;
+
+			// connection aborted
+			downloadNextFile();
+		}
+		else if (error == QNetworkReply::UnknownNetworkError && !m_stopOnExpired)
+		{
+			emit downloadError(tr("Download expired: %1").arg(errorString), *entry);
+
+			// connection expired
 			downloadNextFile();
 		}
 		else
@@ -981,7 +1029,7 @@ void DownloadManager::onGetFinished()
 			}
 			else
 			{
-				processError(entry, reply->errorString());
+				processError(entry, errorString);
 			}
 		}
 	}
@@ -1131,7 +1179,9 @@ void DownloadManager::onHeadFinished()
 			// already downloaded by parts
 			if (!entry->fullPath.isEmpty() && QFile::exists(entry->fullPath))
 			{
-				if (QFileInfo(entry->fullPath).size() == entry->filesize)
+				qint64 filesize = QFileInfo(entry->fullPath).size();
+
+				if (filesize == entry->filesize)
 				{
 					setFileModificationDate(entry->fullPath, lastModified);
 
@@ -1143,6 +1193,14 @@ void DownloadManager::onHeadFinished()
 
 					return;
 				}
+				else if (filesize > entry->filesize)
+				{
+					processError(entry, tr("File is larger on disk (%1) than on server (%1)").arg(filesize).arg(entry->filesize));
+
+					return;
+				}
+
+				// resuming
 			}
 
 			processAcceptRanges(entry, acceptRanges);
