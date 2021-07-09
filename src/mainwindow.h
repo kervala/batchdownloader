@@ -87,6 +87,7 @@ protected:
 	bool saveSettings();
 
 	void printLog(const QString &style, const QString &str);
+	void printSuccess(const QString& str);
 	void printInfo(const QString &str);
 	void printWarning(const QString &str);
 	void printError(const QString &str);

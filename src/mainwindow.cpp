@@ -86,7 +86,7 @@ MainWindow::MainWindow():QMainWindow()
 	connect(urlsClearPushButton, &QPushButton::clicked, this, &MainWindow::onClear);
 
 	QTextDocument *doc = new QTextDocument(this);
-	doc->setDefaultStyleSheet(".error { color: #f00; }\n.warning { color: #f80; }\n.info { }\n");
+	doc->setDefaultStyleSheet(".error { color: #f00; }\n.warning { color: #f80; }\n.info { }\n.success { #0f0; }\n");
 	logsTextEdit->setDocument(doc);
 
 	urlsListView->setModel(new QStringListModel(this));
@@ -769,12 +769,12 @@ void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
 
 void MainWindow::onDownloadSucceeded(const QByteArray& data, const DownloadEntry& entry)
 {
-	printInfo(tr("Download succeeded"));
+	printSuccess(tr("Download succeeded"));
 }
 
 void MainWindow::onDownloadSaved(const DownloadEntry& entry)
 {
-	printInfo(tr("File %1 saved").arg(entry.filename));
+	printSuccess(tr("File %1 saved").arg(entry.filename));
 }
 
 void MainWindow::onDownloadInfo(const QString& info, const DownloadEntry& entry)
@@ -801,6 +801,11 @@ void MainWindow::printLog(const QString &style, const QString &str)
 	logsTextEdit->append(QString("<div class='%1'>%2</div>").arg(style).arg(str));
 	logsTextEdit->moveCursor(QTextCursor::End);
 	logsTextEdit->ensureCursorVisible();
+}
+
+void MainWindow::printSuccess(const QString& str)
+{
+	printLog("success", str);
 }
 
 void MainWindow::printInfo(const QString &str)
