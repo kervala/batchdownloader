@@ -1001,6 +1001,13 @@ void DownloadManager::onGetFinished()
 			// retry with head to resume download
 			entry->method = DownloadEntry::Method::Head;
 
+			entry->supportsAcceptRanges = false;
+			entry->supportsContentRange = false;
+
+			entry->fileoffset = 0;
+			entry->filesize = 0;
+			entry->time = QDateTime();
+
 			// connection aborted
 			downloadNextFile();
 		}
