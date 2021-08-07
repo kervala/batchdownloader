@@ -474,61 +474,68 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 					return true;
 				}
 
-				if (!entry->file)
+				if (entry->file)
 				{
-					QString directory = QFileInfo(entry->fullPath).absolutePath();
+					emit downloadInfo(tr("File already open, flushing and closing it"), *entry);
 
-					// create directory if not exists
-					if (!QFile::exists(directory)) QDir().mkpath(directory);
+					entry->file->flush();
+					entry->file->close();
 
-					if (getFreeDiskSpace(directory) < entry->filesize)
+					entry->file->deleteLater();
+
+					entry->file = nullptr;
+				}
+
+				QString directory = QFileInfo(entry->fullPath).absolutePath();
+
+				// create directory if not exists
+				if (!QFile::exists(directory)) QDir().mkpath(directory);
+
+				// check free disk space
+				if (entry->filesize > 0 && getFreeDiskSpace(directory) < entry->filesize)
+				{
+					emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
+
+					stop();
+
+					return false;
+				}
+
+				// check if file already at least partially downloaded
+				QFileInfo fileInfo(entry->fullPath);
+
+				if (fileInfo.exists())
+				{
+					entry->fileoffset = fileInfo.size();
+
+					emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(entry->filesize), *entry);
+
+					// continue if offset less than size
+					if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
 					{
-						emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
+						if (entry->checkDownloadedFile())
+						{
+							emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
+						}
+						else
+						{
+							// or has wrong size
+							emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
+						}
 
-						stop();
-
-						return false;
-					}
-
-					if (!entry->openFile())
-					{
-						emit downloadError(tr("Unable to write file"), *entry);
-
-						return false;
+						return true;
 					}
 				}
 				else
 				{
-					// check if file already at least partially downloaded
-					QFileInfo fileInfo(entry->fullPath);
+					entry->fileoffset = 0;
+				}
 
-					if (fileInfo.exists())
-					{
-						// don't check size here since file may be not flushed
-						emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(entry->filesize), *entry);
+				if (!entry->openFile())
+				{
+					emit downloadError(tr("Unable to write file"), *entry);
 
-						// continue if offset less than size
-						if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
-						{
-							if (entry->checkDownloadedFile())
-							{
-								emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
-							}
-							else
-							{
-								// or has wrong size
-								emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
-							}
-
-							return true;
-						}
-					}
-					else
-					{
-						entry->fileoffset = 0;
-					}
-
-					emit downloadWarning(tr("File not closed, resuming..."), *entry);
+					return false;
 				}
 			}
 
