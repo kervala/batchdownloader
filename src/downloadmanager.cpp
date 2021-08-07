@@ -281,6 +281,63 @@ bool DownloadManager::download(const DownloadEntry &entry)
 	return downloadEntry(e);
 }
 
+bool DownloadManager::checkEntryFileOffset(DownloadEntry* entry)
+{
+	if (entry->file)
+	{
+		emit downloadInfo(tr("File already open, flushing and closing it"), *entry);
+
+		entry->file->flush();
+		entry->file->close();
+
+		entry->file->deleteLater();
+
+		entry->file = nullptr;
+
+		// sleep 1 second to wait for flush
+		QThread::sleep(1);
+	}
+
+	entry->fileoffset = 0;
+
+	// don't continue if full path is not defined
+	if (entry->fullPath.isEmpty())
+	{
+		return false;
+	}
+
+	// check if file already at least partially downloaded
+	QFileInfo fileInfo(entry->fullPath);
+
+	// don't continue if full path doesn't exist
+	if (!fileInfo.exists())
+	{
+		return false;
+	}
+
+	entry->fileoffset = fileInfo.size();
+
+	// continue if offset less than size
+	if (entry->filesize <= 0 || entry->fileoffset < entry->filesize)
+	{
+		emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(entry->filesize), *entry);
+
+		return false;
+	}
+
+	if (entry->checkDownloadedFile())
+	{
+		emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
+	}
+	else
+	{
+		// or has wrong size
+		emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
+	}
+
+	return true;
+}
+
 bool DownloadManager::downloadEntry(DownloadEntry *entry)
 {
 	if (entry->reply)
@@ -428,35 +485,9 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 				// only try to resume if file partially downloaded
 				request.setRawHeader("Range", QString("bytes=%1-").arg(entry->fileoffset).toLatin1());
 			}
-			else
+			else if (checkEntryFileOffset(entry))
 			{
-				// check if file already at least partially downloaded
-				QFileInfo fileInfo(entry->fullPath);
-
-				if (fileInfo.exists())
-				{
-					entry->fileoffset = fileInfo.size();
-
-					// continue if offset less than size
-					if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
-					{
-						if (entry->checkDownloadedFile())
-						{
-							emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
-						}
-						else
-						{
-							// or has wrong size
-							emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
-						}
-
-						return true;
-					}
-				}
-				else
-				{
-					entry->fileoffset = 0;
-				}
+				return true;
 			}
 
 			reply = m_manager->head(request);
@@ -467,32 +498,13 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 		{
 			if (!entry->fullPath.isEmpty())
 			{
-				if (entry->checkDownloadedFile())
-				{
-					emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
-
-					return true;
-				}
-
-				if (entry->file)
-				{
-					emit downloadInfo(tr("File already open, flushing and closing it"), *entry);
-
-					entry->file->flush();
-					entry->file->close();
-
-					entry->file->deleteLater();
-
-					entry->file = nullptr;
-				}
-
 				QString directory = QFileInfo(entry->fullPath).absolutePath();
 
 				// create directory if not exists
 				if (!QFile::exists(directory)) QDir().mkpath(directory);
 
 				// check free disk space
-				if (entry->filesize > 0 && getFreeDiskSpace(directory) < entry->filesize)
+				if (entry->filesize > 0 && getFreeDiskSpace(directory) < (entry->filesize - entry->fileoffset))
 				{
 					emit downloadError(tr("Not enough disk space to save %1").arg(directory), *entry);
 
@@ -501,34 +513,9 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 					return false;
 				}
 
-				// check if file already at least partially downloaded
-				QFileInfo fileInfo(entry->fullPath);
-
-				if (fileInfo.exists())
+				if (checkEntryFileOffset(entry))
 				{
-					entry->fileoffset = fileInfo.size();
-
-					emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(entry->filesize), *entry);
-
-					// continue if offset less than size
-					if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
-					{
-						if (entry->checkDownloadedFile())
-						{
-							emit downloadInfo(tr("File %1 is already complete").arg(entry->filename), *entry);
-						}
-						else
-						{
-							// or has wrong size
-							emit downloadWarning(tr("File %1 is larger than expected").arg(entry->filename), *entry);
-						}
-
-						return true;
-					}
-				}
-				else
-				{
-					entry->fileoffset = 0;
+					return true;
 				}
 
 				if (!entry->openFile())
