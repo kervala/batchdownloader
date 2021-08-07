@@ -112,6 +112,8 @@ private:
 	void processAcceptRanges(DownloadEntry* entry, const QString& acceptRanges);
 	void processContentRange(DownloadEntry* entry, const QString& contentRange, qint64 contentLength);
 
+	bool checkEntryFileOffset(DownloadEntry* entry);
+
 	QNetworkAccessManager *m_manager;
 	bool m_mustStop;
 	bool m_stopOnError;
