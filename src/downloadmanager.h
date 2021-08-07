@@ -64,6 +64,7 @@ signals:
 	void downloadStarted(const DownloadEntry& entry);
 	void downloadStop(const DownloadEntry& entry);
 	void downloadProgress(qint64 current, qint64 total, int speed); // speed is in kiB/s
+	void downloadCanceled(bool manually);
 	void downloadSucceeded(const QByteArray &data, const DownloadEntry &entry);
 	void downloadRedirected(const QString &url, const DownloadEntry& entry);
 	void downloadSaved(const DownloadEntry &entry);
