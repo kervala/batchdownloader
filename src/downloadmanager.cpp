@@ -504,7 +504,8 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 					if (fileInfo.exists())
 					{
-						entry->fileoffset = fileInfo.size();
+						// don't check size here since file may be not flushed
+						emit downloadInfo(tr("Resuming from %1 to %2 bytes").arg(entry->fileoffset).arg(entry->filesize), *entry);
 
 						// continue if offset less than size
 						if (entry->filesize > 0 && entry->fileoffset >= entry->filesize)
