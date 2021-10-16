@@ -20,13 +20,17 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "ui_mainwindow.h"
-
 class QProgressBar;
 class QWinTaskbarButton;
 class DownloadManager;
+class Updater;
 
 struct DownloadEntry;
+
+namespace Ui
+{
+	class MainWindow;
+}
 
 struct Batch
 {
@@ -44,7 +48,7 @@ struct Batch
 
 typedef QVector<Batch> Batches;
 
-class MainWindow : public QMainWindow, public Ui::MainWindow
+class MainWindow : public QMainWindow
 {
 	Q_OBJECT
 
@@ -59,6 +63,16 @@ public slots:
 	void onExportCSV();
 	void onImportCSV();
 	void onClear();
+
+	// help menu
+	void onCheckUpdates();
+	void onAbout();
+	void onAboutQt();
+
+	// signals from OAuth2
+	void onNewVersion(const QString& url, const QString& date, uint size, const QString& version);
+	void onNoNewVersion();
+	void onProgress(qint64 readBytes, qint64 totalBytes);
 
 	void onQueueStarted(int total);
 	void onQueueProgress(int current, int total);
@@ -98,7 +112,10 @@ protected:
 	void saveCurrent();
 	void restoreCurrent();
 
+	Ui::MainWindow* m_ui;
 	DownloadManager* m_manager;
+
+	Updater* m_updater;
 
 	QLabel* m_fileLabel;
 	QLabel* m_speedLabel;

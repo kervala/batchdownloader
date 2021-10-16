@@ -21,10 +21,14 @@
 
 #include "common.h"
 #include "mainwindow.h"
+#include "ui_mainwindow.h"
 
 #include "functions.h"
 #include "downloadmanager.h"
 #include "downloadentry.h"
+#include "systrayicon.h"
+#include "updater.h"
+#include "updatedialog.h"
 
 #include <QtWidgets/QFileDialog>
 
@@ -35,7 +39,11 @@
 
 MainWindow::MainWindow():QMainWindow()
 {
-	setupUi(this);
+	m_ui = new Ui::MainWindow();
+	m_ui->setupUi(this);
+
+	// check for a new version
+	m_updater = new Updater(this);
 
 #ifdef Q_OS_WIN32
 	m_button = new QWinTaskbarButton(this);
@@ -60,40 +68,54 @@ MainWindow::MainWindow():QMainWindow()
 
 	m_fileLabel = new QLabel(this);
 	m_fileLabel->setMinimumSize(QSize(500, 12));
-	statusbar->addWidget(m_fileLabel);
+	m_ui->statusbar->addWidget(m_fileLabel);
 
 	m_speedLabel = new QLabel(this);
 	m_speedLabel->setMaximumSize(QSize(16777215, 12));
-	statusbar->addWidget(m_speedLabel);
+	m_ui->statusbar->addWidget(m_speedLabel);
 
 	m_progressCurrent = new QProgressBar(this);
 	m_progressCurrent->setMaximumSize(QSize(16777215, 12));
 	m_progressCurrent->setMaximum(100);
-	statusbar->addPermanentWidget(m_progressCurrent);
+	m_ui->statusbar->addPermanentWidget(m_progressCurrent);
 
 	m_progressTotal = new QProgressBar(this);
 	m_progressTotal->setMaximumSize(QSize(16777215, 12));
 	m_progressTotal->setMaximum(100);
-	statusbar->addPermanentWidget(m_progressTotal);
+	m_ui->statusbar->addPermanentWidget(m_progressTotal);
 
 	loadSettings();
 
-	connect(detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
-	connect(downloadButton, &QPushButton::clicked, this, &MainWindow::onDownloadClicked);
-	connect(browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
-	connect(urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
-	connect(urlsExportPushButton, &QPushButton::clicked, this, &MainWindow::onExportCSV);
-	connect(urlsClearPushButton, &QPushButton::clicked, this, &MainWindow::onClear);
+	connect(m_ui->detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
+	connect(m_ui->downloadButton, &QPushButton::clicked, this, &MainWindow::onDownloadClicked);
+	connect(m_ui->browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
+	connect(m_ui->urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
+	connect(m_ui->urlsExportPushButton, &QPushButton::clicked, this, &MainWindow::onExportCSV);
+	connect(m_ui->urlsClearPushButton, &QPushButton::clicked, this, &MainWindow::onClear);
+
+	// Help menu
+	connect(m_ui->actionCheckUpdates, &QAction::triggered, this, &MainWindow::onCheckUpdates);
+	connect(m_ui->actionAbout, &QAction::triggered, this, &MainWindow::onAbout);
+	connect(m_ui->actionAboutQt, &QAction::triggered, this, &MainWindow::onAboutQt);
 
 	QTextDocument *doc = new QTextDocument(this);
 	doc->setDefaultStyleSheet(".error { color: #f00; }\n.warning { color: #f80; }\n.info { }\n.success { #0f0; }\n");
-	logsTextEdit->setDocument(doc);
+	m_ui->logsTextEdit->setDocument(doc);
 
-	urlsListView->setModel(new QStringListModel(this));
+	m_ui->urlsListView->setModel(new QStringListModel(this));
+
+	SystrayIcon* systray = new SystrayIcon(this);
+
+	// Updater
+	connect(m_updater, &Updater::newVersionDetected, this, &MainWindow::onNewVersion);
+	connect(m_updater, &Updater::noNewVersionDetected, this, &MainWindow::onNoNewVersion);
+
+	m_updater->checkUpdates(true);
 }
 
 MainWindow::~MainWindow()
 {
+	delete m_ui;
 }
 
 void MainWindow::showEvent(QShowEvent *e)
@@ -107,42 +129,42 @@ void MainWindow::showEvent(QShowEvent *e)
 
 bool MainWindow::loadSettings()
 {
-	urlEdit->setText(m_settings.value("SourceURL").toString());
-	filenameParameterEdit->setText(m_settings.value("FilenameParameter").toString());
-	refererEdit->setText(m_settings.value("RefererURL").toString());
-	userAgentEdit->setText(m_settings.value("UserAgent").toString());
-	folderEdit->setText(m_settings.value("DestinationFolder").toString());
+	m_ui->urlEdit->setText(m_settings.value("SourceURL").toString());
+	m_ui->filenameParameterEdit->setText(m_settings.value("FilenameParameter").toString());
+	m_ui->refererEdit->setText(m_settings.value("RefererURL").toString());
+	m_ui->userAgentEdit->setText(m_settings.value("UserAgent").toString());
+	m_ui->folderEdit->setText(m_settings.value("DestinationFolder").toString());
 
-	firstSpinBox->setValue(m_settings.value("First").toInt());
-	lastSpinBox->setValue(m_settings.value("Last").toInt());
-	stepSpinBox->setValue(m_settings.value("Step").toInt());
+	m_ui->firstSpinBox->setValue(m_settings.value("First").toInt());
+	m_ui->lastSpinBox->setValue(m_settings.value("Last").toInt());
+	m_ui->stepSpinBox->setValue(m_settings.value("Step").toInt());
 
-	useLastDirectoryCheckBox->setChecked(m_settings.value("UseLastDirectoryFromURL").toBool());
-	useBeforeLastDirectoryCheckBox->setChecked(m_settings.value("UseBeforeLastDirectoryFromURL").toBool());
-	replaceUnderscoresBySpacesCheckBox->setChecked(m_settings.value("ReplaceUnderscoresBySpaces").toBool());
-	skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
-	stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
+	m_ui->useLastDirectoryCheckBox->setChecked(m_settings.value("UseLastDirectoryFromURL").toBool());
+	m_ui->useBeforeLastDirectoryCheckBox->setChecked(m_settings.value("UseBeforeLastDirectoryFromURL").toBool());
+	m_ui->replaceUnderscoresBySpacesCheckBox->setChecked(m_settings.value("ReplaceUnderscoresBySpaces").toBool());
+	m_ui->skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
+	m_ui->stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
 
 	return true;
 }
 
 bool MainWindow::saveSettings()
 {
-	m_settings.setValue("SourceURL", urlEdit->text());
-	m_settings.setValue("FilenameParameter", filenameParameterEdit->text());
-	m_settings.setValue("RefererURL", refererEdit->text());
-	m_settings.setValue("UserAgent", userAgentEdit->text());
-	m_settings.setValue("DestinationFolder", folderEdit->text());
+	m_settings.setValue("SourceURL", m_ui->urlEdit->text());
+	m_settings.setValue("FilenameParameter", m_ui->filenameParameterEdit->text());
+	m_settings.setValue("RefererURL", m_ui->refererEdit->text());
+	m_settings.setValue("UserAgent", m_ui->userAgentEdit->text());
+	m_settings.setValue("DestinationFolder", m_ui->folderEdit->text());
 
-	m_settings.setValue("First", firstSpinBox->value());
-	m_settings.setValue("Last", lastSpinBox->value());
-	m_settings.setValue("Step", stepSpinBox->value());
+	m_settings.setValue("First", m_ui->firstSpinBox->value());
+	m_settings.setValue("Last", m_ui->lastSpinBox->value());
+	m_settings.setValue("Step", m_ui->stepSpinBox->value());
 
-	m_settings.setValue("UseLastDirectoryFromURL", useLastDirectoryCheckBox->isChecked());
-	m_settings.setValue("UseBeforeLastDirectoryFromURL", useBeforeLastDirectoryCheckBox->isChecked());
-	m_settings.setValue("ReplaceUnderscoresBySpaces", replaceUnderscoresBySpacesCheckBox->isChecked());
-	m_settings.setValue("SkipExistingFiles", skipCheckBox->isChecked());
-	m_settings.setValue("StopOnError", stopCheckBox->isChecked());
+	m_settings.setValue("UseLastDirectoryFromURL", m_ui->useLastDirectoryCheckBox->isChecked());
+	m_settings.setValue("UseBeforeLastDirectoryFromURL", m_ui->useBeforeLastDirectoryCheckBox->isChecked());
+	m_settings.setValue("ReplaceUnderscoresBySpaces", m_ui->replaceUnderscoresBySpacesCheckBox->isChecked());
+	m_settings.setValue("SkipExistingFiles", m_ui->skipCheckBox->isChecked());
+	m_settings.setValue("StopOnError", m_ui->stopCheckBox->isChecked());
 
 	return true;
 }
@@ -174,11 +196,94 @@ void MainWindow::onExportCSV()
 		QMessageBox::critical(this, tr("Error"), tr("Unable to save CSV file."));
 	}
 }
+
 void MainWindow::onClear()
 {
-	urlsListView->model()->removeRows(0, m_batches.size());
+	m_ui->urlsListView->model()->removeRows(0, m_batches.size());
 
 	m_batches.clear();
+
+	m_manager->reset();
+}
+
+void MainWindow::onCheckUpdates()
+{
+	m_updater->checkUpdates(false);
+}
+
+void MainWindow::onAbout()
+{
+	QMessageBox::about(this,
+		tr("About %1").arg(QApplication::applicationName()),
+		QString("%1 %2<br>").arg(QApplication::applicationName()).arg(QApplication::applicationVersion()) +
+		tr("A tool to download URLs") +
+		QString("<br><br>") +
+		tr("Author: %1").arg("<a href=\"http://kervala.deviantart.com\">Kervala</a><br>") +
+		tr("Support: %1").arg("<a href=\"http://dev.kervala.net/projects/batchdownloader\">http://dev.kervala.net/projects/batchdownloader</a>"));
+}
+
+void MainWindow::onAboutQt()
+{
+	QMessageBox::aboutQt(this);
+}
+
+void MainWindow::onNewVersion(const QString& url, const QString& date, uint size, const QString& version)
+{
+	QMessageBox::StandardButton reply = QMessageBox::question(this,
+		tr("New version"),
+		tr("Version %1 is available since %2.\n\nDo you want to download it now?").arg(version).arg(date),
+		QMessageBox::Yes | QMessageBox::No);
+
+	if (reply != QMessageBox::Yes) return;
+
+	UpdateDialog dialog(this);
+
+	connect(&dialog, &UpdateDialog::downloadProgress, this, &MainWindow::onProgress);
+
+	dialog.download(url, size);
+
+	if (dialog.exec() == QDialog::Accepted)
+	{
+		// if user clicked on Install, close kdAmn
+		close();
+	}
+}
+
+void MainWindow::onNoNewVersion()
+{
+	QMessageBox::information(this,
+		tr("No update found"),
+		tr("You already have the last %1 version (%2).").arg(QApplication::applicationName()).arg(QApplication::applicationVersion()));
+}
+
+void MainWindow::onProgress(qint64 readBytes, qint64 totalBytes)
+{
+#ifdef Q_OS_WIN32
+	QWinTaskbarProgress* progress = m_button->progress();
+
+	if (readBytes == totalBytes)
+	{
+		// end
+		progress->hide();
+	}
+	else if (readBytes == 0)
+	{
+		//		TODO: see why it doesn't work
+		//		m_button->setOverlayIcon(style()->standardIcon(QStyle::SP_MediaPlay) /* QIcon(":/icons/upload.svg") */);
+		//		m_button->setOverlayAccessibleDescription(tr("Upload"));
+
+				// beginning
+		progress->show();
+		progress->setRange(0, totalBytes);
+	}
+	else
+	{
+		progress->show();
+		progress->setValue(readBytes);
+	}
+#else
+	// TODO: for other OSes
+#endif
 }
 
 bool MainWindow::loadCSV(const QString& filename)
@@ -328,7 +433,7 @@ bool MainWindow::loadCSV(const QString& filename)
 		m_batches << batch;
 	}
 
-	qobject_cast<QStringListModel*>(urlsListView->model())->setStringList(urls);
+	qobject_cast<QStringListModel*>(m_ui->urlsListView->model())->setStringList(urls);
 
 	return true;
 }
@@ -384,21 +489,21 @@ QString MainWindow::getBeforeLastDirectoryFromUrl(const QString &url)
 
 QString MainWindow::directoryFromUrl(const QString &url)
 {
-	QString dir = folderEdit->text();
+	QString dir = m_ui->folderEdit->text();
 	QString lastDir;
 
-	if (useLastDirectoryCheckBox->isChecked())
+	if (m_ui->useLastDirectoryCheckBox->isChecked())
 	{
 		lastDir = getLastDirectoryFromUrl(url);
 	}
-	else if (useBeforeLastDirectoryCheckBox->isChecked())
+	else if (m_ui->useBeforeLastDirectoryCheckBox->isChecked())
 	{
 		lastDir = getBeforeLastDirectoryFromUrl(url);
 	}
 
 	if (!lastDir.isEmpty())
 	{
-		if (replaceUnderscoresBySpacesCheckBox->isChecked())
+		if (m_ui->replaceUnderscoresBySpacesCheckBox->isChecked())
 		{
 			lastDir.replace("_", " ");
 		}
@@ -412,7 +517,7 @@ QString MainWindow::directoryFromUrl(const QString &url)
 QString MainWindow::fileNameFromUrl(const QString &url, int currentFile)
 {
 	int posParameter = -1;
-	QString param = filenameParameterEdit->text();
+	QString param = m_ui->filenameParameterEdit->text();
 	QString fileName = QFileInfo(url).fileName();
 	QString formatFileName = QFileInfo(m_urlFormat).fileName();
 
@@ -472,7 +577,7 @@ struct SNumber
 
 void MainWindow::onDetectFromURL()
 {
-	QString url = urlEdit->text();
+	QString url = m_ui->urlEdit->text();
 
 	// already detected
 	if (url.indexOf('#') > -1) return;
@@ -517,11 +622,11 @@ void MainWindow::onDetectFromURL()
 
 		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber.number).arg(url));
 
-		lastSpinBox->setValue(lastNumber.number);
+		m_ui->lastSpinBox->setValue(lastNumber.number);
 
 		url.replace(lastNumber.pos, lastNumber.length, QString('#').repeated(lastNumber.length));
 
-		urlEdit->setText(url);
+		m_ui->urlEdit->setText(url);
 	}
 	else
 	{
@@ -534,7 +639,7 @@ void MainWindow::onBrowse()
 	QString folder = QFileDialog::getExistingDirectory(this, tr("Destination folder"), "", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
 
 	if (!folder.isEmpty())
-		folderEdit->setText(folder);
+		m_ui->folderEdit->setText(folder);
 }
 
 void MainWindow::onDownloadClicked()
@@ -563,12 +668,12 @@ void MainWindow::onDownloadClicked()
 
 void MainWindow::saveCurrent()
 {
-	m_current.directory = folderEdit->text();
-	m_current.url = urlEdit->text();
-	m_current.referer = refererEdit->text();
-	m_current.first = firstSpinBox->value();
-	m_current.last = lastSpinBox->value();
-	m_current.step = stepSpinBox->value();
+	m_current.directory = m_ui->folderEdit->text();
+	m_current.url = m_ui->urlEdit->text();
+	m_current.referer = m_ui->refererEdit->text();
+	m_current.first = m_ui->firstSpinBox->value();
+	m_current.last = m_ui->lastSpinBox->value();
+	m_current.step = m_ui->stepSpinBox->value();
 }
 
 void MainWindow::restoreCurrent()
@@ -579,12 +684,12 @@ void MainWindow::restoreCurrent()
 	// don't reset if URL is empty
 	if (batch.url.isEmpty()) return;
 
-	folderEdit->setText(batch.directory);
-	urlEdit->setText(batch.url);
-	refererEdit->setText(batch.referer);
-	firstSpinBox->setValue(batch.first);
-	lastSpinBox->setValue(batch.last);
-	stepSpinBox->setValue(batch.step);
+	m_ui->folderEdit->setText(batch.directory);
+	m_ui->urlEdit->setText(batch.url);
+	m_ui->refererEdit->setText(batch.referer);
+	m_ui->firstSpinBox->setValue(batch.first);
+	m_ui->lastSpinBox->setValue(batch.last);
+	m_ui->stepSpinBox->setValue(batch.step);
 }
 
 void MainWindow::downloadNextBatch()
@@ -593,16 +698,16 @@ void MainWindow::downloadNextBatch()
 	{
 		const Batch &batch = m_batches[0];
 
-		folderEdit->setText(batch.directory);
-		urlEdit->setText(batch.url);
-		refererEdit->setText(batch.referer);
-		firstSpinBox->setValue(batch.first);
-		lastSpinBox->setValue(batch.last);
-		stepSpinBox->setValue(batch.step);
+		m_ui->folderEdit->setText(batch.directory);
+		m_ui->urlEdit->setText(batch.url);
+		m_ui->refererEdit->setText(batch.referer);
+		m_ui->firstSpinBox->setValue(batch.first);
+		m_ui->lastSpinBox->setValue(batch.last);
+		m_ui->stepSpinBox->setValue(batch.step);
 	}
 
-	m_urlFormat = urlEdit->text();
-	m_refererFormat = refererEdit->text();
+	m_urlFormat = m_ui->urlEdit->text();
+	m_refererFormat = m_ui->refererEdit->text();
 	m_maskCount = 0;
 
 	QRegExp maskReg("(#+)");
@@ -616,9 +721,9 @@ void MainWindow::downloadNextBatch()
 	}
 
 	// fix incorrect values
-	if (firstSpinBox->value() < 0) firstSpinBox->setValue(0);
-	if (lastSpinBox->value() < 0) lastSpinBox->setValue(0);
-	if (stepSpinBox->value() < 1) stepSpinBox->setValue(1);
+	if (m_ui->firstSpinBox->value() < 0) m_ui->firstSpinBox->setValue(0);
+	if (m_ui->lastSpinBox->value() < 0) m_ui->lastSpinBox->setValue(0);
+	if (m_ui->stepSpinBox->value() < 1) m_ui->stepSpinBox->setValue(1);
 
 	// initialize progress range
 	if (m_maskCount == 0)
@@ -628,15 +733,15 @@ void MainWindow::downloadNextBatch()
 	else
 	{
 		m_progressTotal->show();
-		m_progressTotal->setMinimum(firstSpinBox->value());
-		m_progressTotal->setMaximum(lastSpinBox->value());
+		m_progressTotal->setMinimum(m_ui->firstSpinBox->value());
+		m_progressTotal->setMaximum(m_ui->lastSpinBox->value());
 	}
 
 	QString url = m_urlFormat;
 
-	int first = firstSpinBox->value();
-	int last = lastSpinBox->value();
-	int step = stepSpinBox->value();
+	int first = m_ui->firstSpinBox->value();
+	int last = m_ui->lastSpinBox->value();
+	int step = m_ui->stepSpinBox->value();
 
 	for (int i = first; i <= last; i += step)
 	{
@@ -682,7 +787,7 @@ void MainWindow::downloadNextBatch()
 
 void MainWindow::onQueueStarted(int total)
 {
-	downloadButton->setText(tr("Stop"));
+	m_ui->downloadButton->setText(tr("Stop"));
 
 	m_progressTotal->setMaximum(total);
 
@@ -730,7 +835,7 @@ void MainWindow::onQueueFinished(bool aborted)
 		{
 			m_batches.removeFirst();
 
-			urlsListView->model()->removeRow(0);
+			m_ui->urlsListView->model()->removeRow(0);
 		}
 
 		if (m_batches.isEmpty())
@@ -749,7 +854,7 @@ void MainWindow::onQueueFinished(bool aborted)
 		// don't delete batches when aborted
 		restoreCurrent();
 
-		downloadButton->setText(tr("Download"));
+		m_ui->downloadButton->setText(tr("Download"));
 	}
 }
 
@@ -791,16 +896,16 @@ void MainWindow::onDownloadError(const QString& error, const DownloadEntry& entr
 {
 	printError(error);
 
-	downloadButton->setText(tr("Download"));
+	m_ui->downloadButton->setText(tr("Download"));
 
 	restoreCurrent();
 }
 
 void MainWindow::printLog(const QString &style, const QString &str)
 {
-	logsTextEdit->append(QString("<div class='%1'>%2</div>").arg(style).arg(str));
-	logsTextEdit->moveCursor(QTextCursor::End);
-	logsTextEdit->ensureCursorVisible();
+	m_ui->logsTextEdit->append(QString("<div class='%1'>%2</div>").arg(style).arg(str));
+	m_ui->logsTextEdit->moveCursor(QTextCursor::End);
+	m_ui->logsTextEdit->ensureCursorVisible();
 }
 
 void MainWindow::printSuccess(const QString& str)
