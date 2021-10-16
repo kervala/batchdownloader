@@ -842,7 +842,10 @@ void MainWindow::onQueueFinished(bool aborted)
 		{
 			restoreCurrent();
 
-			downloadButton->setText(tr("Download"));
+			m_ui->downloadButton->setText(tr("Download"));
+
+			SystrayIcon::getInstance()->displayMessage(tr("BatchDownloader notification"), tr("All files have been downloded."), SystrayIcon::ActionNone);
+
 		}
 		else
 		{
@@ -926,4 +929,6 @@ void MainWindow::printWarning(const QString &str)
 void MainWindow::printError(const QString &str)
 {
 	printLog("error", str);
+
+	SystrayIcon::getInstance()->displayMessage(tr("BatchDownloader notification"), tr("An error occured."), SystrayIcon::ActionNone);
 }
