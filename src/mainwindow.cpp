@@ -532,13 +532,15 @@ static int getItemIndexFromList(QWidget *parent, const QStringList& list, int de
 	// only one index
 	if (list.size() < 2) return defaultIndex;
 
+	bool ok = false;
+
 	QString res = QInputDialog::getItem(parent,
 		MainWindow::tr("Too many matches"),
 		MainWindow::tr("There are too many matches for numbers.\n\nWhat value is the right one?"),
-		list, defaultIndex, false);
+		list, defaultIndex, false, &ok);
 
-	// shouldn't occur
-	if (res.isEmpty()) return defaultIndex;
+	// user pressed Cancel
+	if (!ok) return -1;
 
 	return list.indexOf(res);
 }
@@ -594,6 +596,8 @@ void MainWindow::onLastFromURL()
 		}
 
 		int index = getItemIndexFromList(this, choices, maxIndex);
+
+		if (index == -1) return;
 
 		SNumber lastNumber = numbers[index];
 
@@ -655,6 +659,8 @@ static QString getFolderFromURL(QWidget *parent, const QString& url)
 
 	int index = getItemIndexFromList(parent, choices, defaultIndex);
 
+	if (index == -1) return "";
+
 	QString folder = parts[index];
 
 	return folder;
@@ -666,16 +672,11 @@ void MainWindow::onFolderFromURL()
 
 	QString folder = getFolderFromURL(this, url);
 
-	if (!folder.isEmpty())
-	{
-		printInfo(tr("Detected folder '%1' in URL %2").arg(folder).arg(url));
+	if (folder.isEmpty()) return;
 
-		m_ui->subfolderEdit->setText(folder);
-	}
-	else
-	{
-		printWarning(tr("Unable to detect a folder in URL %1").arg(url));
-	}
+	printInfo(tr("Detected folder '%1' in URL %2").arg(folder).arg(url));
+
+	m_ui->subfolderEdit->setText(folder);
 }
 
 void MainWindow::onFolderFromReferer()
@@ -684,16 +685,11 @@ void MainWindow::onFolderFromReferer()
 
 	QString folder = getFolderFromURL(this, url);
 
-	if (!folder.isEmpty())
-	{
-		printInfo(tr("Detected folder '%1' in referer %2").arg(folder).arg(url));
+	if (folder.isEmpty()) return;
 
-		m_ui->subfolderEdit->setText(folder);
-	}
-	else
-	{
-		printWarning(tr("Unable to detect a folder in referer %1").arg(url));
-	}
+	printInfo(tr("Detected folder '%1' in referer %2").arg(folder).arg(url));
+
+	m_ui->subfolderEdit->setText(folder);
 }
 
 void MainWindow::onBrowse()
