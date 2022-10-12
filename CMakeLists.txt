@@ -69,7 +69,7 @@ SETUP_EXTERNAL()
 GEN_CONFIG_H()
 GEN_REVISION_H()
 
-USE_QT_MODULES(Gui Network Svg QT5 Widgets WinExtras)
+USE_QT_MODULES(Gui Network Svg Widgets WinExtras)
 
 FIND_PACKAGE(MyZLIB REQUIRED)
 

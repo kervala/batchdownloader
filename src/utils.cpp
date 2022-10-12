@@ -94,15 +94,15 @@ QString decodeEntities(const QString& src)
 	initSpecialEntities();
 
 	QString ret(src);
-	QRegExp re("&#([0-9]+);");
-	re.setMinimal(true);
+	QRegularExpression re("&#([0-9]+);");
 
-	int pos = 0;
+	QRegularExpressionMatchIterator it = re.globalMatch(src);
 
-	while((pos = re.indexIn(src, pos)) != -1)
+	while(it.hasNext())
 	{
-		ret = ret.replace(re.cap(0), QChar(re.cap(1).toInt(0, 10)));
-		pos += re.matchedLength();
+		QRegularExpressionMatch match = it.next();
+
+		ret = ret.replace(match.captured(0), QChar(match.captured(1).toInt(0, 10)));
 	}
 
 	return ret;

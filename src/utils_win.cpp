@@ -31,7 +31,6 @@ enum HBitmapFormat
 
 QPixmap qt_pixmapFromWinHBITMAP(HBITMAP bitmap, int hbitmapFormat = 0);
 
-#include <QtWin>
 #include <windows.h>
 #include <tlhelp32.h>
 #include <tchar.h>
@@ -102,10 +101,10 @@ int QKeySequenceToVK(const QKeySequence& seq)
 		s_keyArray["Alt"] = VK_MENU;
 
 		// numbers numpad
-		for (int i = '0'; i <= '9'; ++i) s_keyArray[QString(i)] = VK_NUMPAD0 + i;
+		for (int i = '0'; i <= '9'; ++i) s_keyArray[QString((const char)i)] = VK_NUMPAD0 + i;
 
 		// letters
-		for (int i = 'A'; i <= 'Z'; ++i) s_keyArray[QString(i)] = i;
+		for (int i = 'A'; i <= 'Z'; ++i) s_keyArray[QString((const char)i)] = i;
 
 		// function keys
 		for (int i = 1; i <= 24; ++i) s_keyArray[QString("F%1").arg(i)] = VK_F1 + i - 1;
@@ -504,7 +503,7 @@ bool RestoreMinimizedWindow(WId id)
 	}
 	else
 	{
-		id = QApplication::desktop()->winId();
+		//id = QApplication::desktop()->winId();
 		// time needed to hide capture dialog
 		Sleep(500);
 	}

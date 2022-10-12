@@ -32,12 +32,13 @@
 
 #include <QtWidgets/QFileDialog>
 
-#ifdef Q_OS_WIN32
+#if defined(Q_OS_WIN32) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <QtWinExtras/QWinTaskbarProgress>
 #include <QtWinExtras/QWinTaskbarButton>
+#define USE_TASKBAR
 #endif
 
-MainWindow::MainWindow():QMainWindow()
+MainWindow::MainWindow():QMainWindow(), m_button(nullptr)
 {
 	m_ui = new Ui::MainWindow();
 	m_ui->setupUi(this);
@@ -45,7 +46,7 @@ MainWindow::MainWindow():QMainWindow()
 	// check for a new version
 	m_updater = new Updater(this);
 
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 	m_button = new QWinTaskbarButton(this);
 #endif
 
@@ -120,7 +121,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::showEvent(QShowEvent *e)
 {
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 	m_button->setWindow(windowHandle());
 #endif
 
@@ -258,7 +259,7 @@ void MainWindow::onNoNewVersion()
 
 void MainWindow::onProgress(qint64 readBytes, qint64 totalBytes)
 {
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 	QWinTaskbarProgress* progress = m_button->progress();
 
 	if (readBytes == totalBytes)
@@ -360,7 +361,7 @@ bool MainWindow::loadCSV(const QString& filename)
 		// parse line with data
 		line = file.readLine().trimmed();
 
-		QByteArrayList data;
+		QByteArrayList row;
 
 		bool quoteOpen = false;
 		QByteArray value;
@@ -382,7 +383,7 @@ bool MainWindow::loadCSV(const QString& filename)
 			}
 			else if (c == ',' && !quoteOpen)
 			{
-				data << value;
+				row << value;
 
 				value.clear();
 			}
@@ -394,10 +395,10 @@ bool MainWindow::loadCSV(const QString& filename)
 
 		if (!value.isEmpty())
 		{
-			data << value;
+			row << value;
 		}
 
-		if (data.size() != headers.size())
+		if (row.size() != headers.size())
 		{
 			qDebug() << "Wrong fields number";
 
@@ -406,18 +407,18 @@ bool MainWindow::loadCSV(const QString& filename)
 
 		Batch batch;
 
-		batch.url = data[urlIndex];
+		batch.url = row[urlIndex];
 
 		urls << batch.url;
 
 		if (refererIndex > -1)
 		{
-			batch.referer = data[refererIndex];
+			batch.referer = row[refererIndex];
 		}
 
 		if (directoryIndex > -1)
 		{
-			batch.directory = data[directoryIndex];
+			batch.directory = row[directoryIndex];
 
 			// remove quotes
 			if (batch.directory.length() > 2 && batch.directory[0] == '"' && batch.directory[batch.directory.length() - 1] == '"')
@@ -426,9 +427,9 @@ bool MainWindow::loadCSV(const QString& filename)
 			}
 		}
 
-		batch.first = firstIndex > -1 ? data[firstIndex].toInt() : 1;
-		batch.last = lastIndex > -1 ? data[lastIndex].toInt() : 1;
-		batch.step = stepIndex > -1 ? data[stepIndex].toInt() : 1;
+		batch.first = firstIndex > -1 ? row[firstIndex].toInt() : 1;
+		batch.last = lastIndex > -1 ? row[lastIndex].toInt() : 1;
+		batch.step = stepIndex > -1 ? row[stepIndex].toInt() : 1;
 
 		m_batches << batch;
 	}
@@ -710,12 +711,14 @@ void MainWindow::downloadNextBatch()
 	m_refererFormat = m_ui->refererEdit->text();
 	m_maskCount = 0;
 
-	QRegExp maskReg("(#+)");
+	QRegularExpression maskReg("(#+)");
 	QString mask;
 
-	if (maskReg.indexIn(m_urlFormat) >= 0)
+	QRegularExpressionMatch match = maskReg.match(m_urlFormat);
+
+	if (match.hasMatch())
 	{
-		mask = maskReg.cap(1);
+		mask = match.captured(1);
 		m_maskCount = mask.length();
 		m_urlFormat.replace(mask, "%1");
 	}
@@ -791,7 +794,7 @@ void MainWindow::onQueueStarted(int total)
 
 	m_progressTotal->setMaximum(total);
 
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 		QWinTaskbarProgress* progress = m_button->progress();
 
 		// beginning
@@ -806,7 +809,7 @@ void MainWindow::onQueueProgress(int current, int total)
 {
 	m_progressTotal->setValue(current);
 
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 		QWinTaskbarProgress* progress = m_button->progress();
 
 		// progress
@@ -819,7 +822,7 @@ void MainWindow::onQueueProgress(int current, int total)
 void MainWindow::onQueueFinished(bool aborted)
 {
 
-#ifdef Q_OS_WIN32
+#ifdef USE_TASKBAR
 	QWinTaskbarProgress* progress = m_button->progress();
 
 	// end
@@ -875,7 +878,7 @@ void MainWindow::onDownloadProgress(qint64 done, qint64 total, int speed)
 	m_speedLabel->setText(tr("%1 KiB/s").arg(speed));
 }
 
-void MainWindow::onDownloadSucceeded(const QByteArray& data, const DownloadEntry& entry)
+void MainWindow::onDownloadSucceeded(const QByteArray& /* data */, const DownloadEntry& /* entry */)
 {
 	printSuccess(tr("Download succeeded"));
 }
@@ -885,12 +888,12 @@ void MainWindow::onDownloadSaved(const DownloadEntry& entry)
 	printSuccess(tr("File %1 saved").arg(entry.filename));
 }
 
-void MainWindow::onDownloadInfo(const QString& info, const DownloadEntry& entry)
+void MainWindow::onDownloadInfo(const QString& info, const DownloadEntry& /* entry */)
 {
 	printInfo(info);
 }
 
-void MainWindow::onDownloadWarning(const QString& warning, const DownloadEntry& entry)
+void MainWindow::onDownloadWarning(const QString& warning, const DownloadEntry& /* entry */)
 {
 	printWarning(warning);
 }
