@@ -826,10 +826,8 @@ void DownloadManager::processError(DownloadEntry* entry, const QString& error)
 	{
 		stop();
 	}
-	else
-	{
-		downloadNextFile();
-	}
+
+	downloadNextFile();
 }
 
 void DownloadManager::processContentDisposition(DownloadEntry *entry, const QString &contentDisposition)
