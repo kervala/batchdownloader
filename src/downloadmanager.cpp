@@ -1,6 +1,6 @@
 /*
  *  BatchDownloader is a tool to download URLs
- *  Copyright (C) 2013-2018  Cedric OCHS
+ *  Copyright (C) 2013-2021  Cedric OCHS
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -432,9 +432,9 @@ bool DownloadManager::downloadEntry(DownloadEntry *entry)
 
 			// build parameters
 			reply = m_manager->post(request, params.query().toUtf8());
-
-			connect(reply, &QNetworkReply::finished, this, &DownloadManager::onPostFinished);
 		}
+
+		connect(reply, &QNetworkReply::finished, this, &DownloadManager::onPostFinished);
 	}
 	else if (entry->method == DownloadEntry::Method::Get || entry->method == DownloadEntry::Method::Head)
 	{
@@ -634,7 +634,7 @@ bool DownloadManager::loadCookiesFromDirectory(const QString& directory, const Q
 	return false;
 }
 
-bool DownloadManager::loadCookiesFromFile(const QString& filename, const QString& domain)
+bool DownloadManager::loadCookiesFromFile(const QString& filename, const QString& domain2)
 {
 	QFile file(filename);
 
@@ -748,20 +748,25 @@ void DownloadManager::onProgress(qint64 done, qint64 total)
 		qint64 current = entry->fileoffset + done;
 		qint64 size = entry->fileoffset + total;
 
-		qint64 percent = current * 100 / size;
+		qint64 percent = 0;
 
-		static int s_percent = 0;
-
-		if (percent != s_percent)
+		if (size > 0)
 		{
-			int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+			static int s_percent = 0;
 
-			int speed = seconds > 0 ? done / seconds / 1024 : 0;
+			percent = current * 100 / size;
 
-			emit downloadProgress(current, size, speed);
+			if (percent != s_percent)
+			{
+				int seconds = entry->downloadStart.secsTo(QDateTime::currentDateTime());
+
+				int speed = seconds > 0 ? done / seconds / 1024 : 0;
+
+				emit downloadProgress(current, size, speed);
+			}
+
+			s_percent = percent;
 		}
-
-		s_percent = percent;
 	}
 
 	if (m_mustStop)
@@ -1028,6 +1033,12 @@ void DownloadManager::onGetFinished()
 				removeFromQueue(entry);
 
 				emit authorizationFailed(url, data);
+			}
+			// wrong header ?
+			else if (error == 302 && statusCode == 400)
+			{
+				// cookies too long
+				processError(entry, errorString);
 			}
 			else
 			{
