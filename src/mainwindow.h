@@ -57,7 +57,9 @@ public:
 	virtual ~MainWindow();
 
 public slots:
-	void onDetectFromURL();
+	void onLastFromURL();
+	void onFolderFromURL();
+	void onFolderFromReferer();
 	void onBrowse();
 	void onDownloadClicked();
 	void onExportCSV();
@@ -92,8 +94,6 @@ protected:
 
 	void downloadNextBatch();
 
-	QString getLastDirectoryFromUrl(const QString &url);
-	QString getBeforeLastDirectoryFromUrl(const QString &url);
 	QString directoryFromUrl(const QString &url);
 	QString fileNameFromUrl(const QString &url, int currentFile);
 

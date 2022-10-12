@@ -66,7 +66,6 @@ MainWindow::MainWindow():QMainWindow(), m_button(nullptr)
 	connect(m_manager, &DownloadManager::downloadError, this, &MainWindow::onDownloadError);
 
 	// void downloadRedirected(const QString & url, const QDateTime & lastModified, const DownloadEntry & entry);
-
 	m_fileLabel = new QLabel(this);
 	m_fileLabel->setMinimumSize(QSize(500, 12));
 	m_ui->statusbar->addWidget(m_fileLabel);
@@ -87,7 +86,10 @@ MainWindow::MainWindow():QMainWindow(), m_button(nullptr)
 
 	loadSettings();
 
-	connect(m_ui->detectFromURLButton, &QPushButton::clicked, this, &MainWindow::onDetectFromURL);
+	connect(m_ui->lastFromURLButton, &QPushButton::clicked, this, &MainWindow::onLastFromURL);
+	connect(m_ui->folderFromURLButton, &QPushButton::clicked, this, &MainWindow::onFolderFromURL);
+	connect(m_ui->folderFromRefererButton, &QPushButton::clicked, this, &MainWindow::onFolderFromReferer);
+
 	connect(m_ui->downloadButton, &QPushButton::clicked, this, &MainWindow::onDownloadClicked);
 	connect(m_ui->browseButton, &QPushButton::clicked, this, &MainWindow::onBrowse);
 	connect(m_ui->urlsImportPushButton, &QPushButton::clicked, this, &MainWindow::onImportCSV);
@@ -140,8 +142,6 @@ bool MainWindow::loadSettings()
 	m_ui->lastSpinBox->setValue(m_settings.value("Last").toInt());
 	m_ui->stepSpinBox->setValue(m_settings.value("Step").toInt());
 
-	m_ui->useLastDirectoryCheckBox->setChecked(m_settings.value("UseLastDirectoryFromURL").toBool());
-	m_ui->useBeforeLastDirectoryCheckBox->setChecked(m_settings.value("UseBeforeLastDirectoryFromURL").toBool());
 	m_ui->replaceUnderscoresBySpacesCheckBox->setChecked(m_settings.value("ReplaceUnderscoresBySpaces").toBool());
 	m_ui->skipCheckBox->setChecked(m_settings.value("SkipExistingFiles").toBool());
 	m_ui->stopCheckBox->setChecked(m_settings.value("StopOnError").toBool());
@@ -161,8 +161,6 @@ bool MainWindow::saveSettings()
 	m_settings.setValue("Last", m_ui->lastSpinBox->value());
 	m_settings.setValue("Step", m_ui->stepSpinBox->value());
 
-	m_settings.setValue("UseLastDirectoryFromURL", m_ui->useLastDirectoryCheckBox->isChecked());
-	m_settings.setValue("UseBeforeLastDirectoryFromURL", m_ui->useBeforeLastDirectoryCheckBox->isChecked());
 	m_settings.setValue("ReplaceUnderscoresBySpaces", m_ui->replaceUnderscoresBySpacesCheckBox->isChecked());
 	m_settings.setValue("SkipExistingFiles", m_ui->skipCheckBox->isChecked());
 	m_settings.setValue("StopOnError", m_ui->stopCheckBox->isChecked());
@@ -448,59 +446,10 @@ bool MainWindow::saveCSV(const QString& filename) const
 	return true;
 }
 
-QString MainWindow::getLastDirectoryFromUrl(const QString &url)
-{
-	int posEnd = url.lastIndexOf('/');
-
-	if (posEnd > -1)
-	{
-		int posStart = url.lastIndexOf('/', posEnd - 1);
-
-		if (posStart > -1)
-		{
-			return url.mid(posStart + 1, posEnd - posStart - 1);
-		}
-	}
-
-	printWarning(tr("Unable to find a directory in URL %1").arg(url));
-
-	return "";
-}
-
-QString MainWindow::getBeforeLastDirectoryFromUrl(const QString &url)
-{
-	int posEnd = url.lastIndexOf('/');
-	
-	posEnd = url.lastIndexOf('/', posEnd - 1);
-
-	if (posEnd > -1)
-	{
-		int posStart = url.lastIndexOf('/', posEnd - 1);
-
-		if (posStart > -1)
-		{
-			return url.mid(posStart + 1, posEnd - posStart - 1);
-		}
-	}
-
-	printWarning(tr("Unable to find a directory in URL %1").arg(url));
-
-	return "";
-}
-
 QString MainWindow::directoryFromUrl(const QString &url)
 {
 	QString dir = m_ui->folderEdit->text();
-	QString lastDir;
-
-	if (m_ui->useLastDirectoryCheckBox->isChecked())
-	{
-		lastDir = getLastDirectoryFromUrl(url);
-	}
-	else if (m_ui->useBeforeLastDirectoryCheckBox->isChecked())
-	{
-		lastDir = getBeforeLastDirectoryFromUrl(url);
-	}
+	QString lastDir = m_ui->subfolderEdit->text();
 
 	if (!lastDir.isEmpty())
 	{
@@ -553,10 +502,12 @@ QString MainWindow::fileNameFromUrl(const QString &url, int currentFile)
 
 	if (!param.isEmpty())
 	{
-		QRegExp paramReg(param + "=([^&]+)");
+		QRegularExpression paramReg(param + "=([^&]+)");
 
-		if (paramReg.indexIn(url) > -1)
-			fileName = paramReg.cap(1);
+		QRegularExpressionMatch match = paramReg.match(url);
+
+		if (match.hasMatch())
+			fileName = match.captured(1);
 	}
 
 	return fileName;
@@ -576,7 +527,23 @@ struct SNumber
 	int length;
 };
 
-void MainWindow::onDetectFromURL()
+static int getItemIndexFromList(QWidget *parent, const QStringList& list, int defaultIndex)
+{
+	// only one index
+	if (list.size() < 2) return defaultIndex;
+
+	QString res = QInputDialog::getItem(parent,
+		MainWindow::tr("Too many matches"),
+		MainWindow::tr("There are too many matches for numbers.\n\nWhat value is the right one?"),
+		list, defaultIndex, false);
+
+	// shouldn't occur
+	if (res.isEmpty()) return defaultIndex;
+
+	return list.indexOf(res);
+}
+
+void MainWindow::onLastFromURL()
 {
 	QString url = m_ui->urlEdit->text();
 
@@ -585,13 +552,16 @@ void MainWindow::onDetectFromURL()
 
 	QRegularExpression reg("([0-9]+)");
 
-	QRegularExpressionMatchIterator i = reg.globalMatch(url);
+	// begin to search from 10th character (we don't want to process http(s)://)
+	int pathPos = url.indexOf('/', 10);
+
+	QRegularExpressionMatchIterator it = reg.globalMatch(url, pathPos);
 
 	QVector<SNumber> numbers;
 
-	while (i.hasNext())
+	while (it.hasNext())
 	{
-		QRegularExpressionMatch match = i.next();
+		QRegularExpressionMatch match = it.next();
 
 		if (match.hasMatch())
 		{
@@ -611,15 +581,21 @@ void MainWindow::onDetectFromURL()
 		// look for greater length
 		int maxIndex = -1;
 
+		QStringList choices;
+
 		for (int i = 0; i < numbers.size(); ++i)
 		{
+			choices << QString::number(numbers[i].number);
+
 			if (maxIndex < 0 || numbers[i].length > numbers[maxIndex].length)
 			{
 				maxIndex = i;
 			}
 		}
 
-		SNumber lastNumber = numbers[maxIndex];
+		int index = getItemIndexFromList(this, choices, maxIndex);
+
+		SNumber lastNumber = numbers[index];
 
 		printInfo(tr("Detected %1 files in URL %2").arg(lastNumber.number).arg(url));
 
@@ -632,6 +608,91 @@ void MainWindow::onDetectFromURL()
 	else
 	{
 		printWarning(tr("Unable to detect a number in URL %1").arg(url));
+	}
+}
+
+static QString getFolderFromURL(QWidget *parent, const QString& url)
+{
+	if (url.isEmpty()) return "";
+
+	QRegularExpression reg("/([^/]+)");
+
+	// begin to search from 10th character (we don't want to process http(s)://)
+	int pathPos = url.indexOf('/', 10);
+
+	if (pathPos < 0) return "";
+
+	QRegularExpressionMatchIterator it = reg.globalMatch(url, pathPos);
+
+	QVector<QString> parts;
+
+	while (it.hasNext())
+	{
+		QRegularExpressionMatch match = it.next();
+
+		if (match.hasMatch())
+		{
+			QString part = match.captured(1);
+
+			// at least 3 characters and no #
+			if (part.length() > 3 && !part.contains('#')) parts.push_back(part);
+		}
+	}
+
+	if (parts.isEmpty()) return "";
+
+	// look for greater length
+	int defaultIndex = -1;
+
+	QStringList choices;
+
+	for (int i = 0; i < parts.size(); ++i)
+	{
+		choices << parts[i];
+
+		defaultIndex = i;
+	}
+
+	int index = getItemIndexFromList(parent, choices, defaultIndex);
+
+	QString folder = parts[index];
+
+	return folder;
+}
+
+void MainWindow::onFolderFromURL()
+{
+	QString url = m_ui->urlEdit->text();
+
+	QString folder = getFolderFromURL(this, url);
+
+	if (!folder.isEmpty())
+	{
+		printInfo(tr("Detected folder '%1' in URL %2").arg(folder).arg(url));
+
+		m_ui->subfolderEdit->setText(folder);
+	}
+	else
+	{
+		printWarning(tr("Unable to detect a folder in URL %1").arg(url));
+	}
+}
+
+void MainWindow::onFolderFromReferer()
+{
+	QString url = m_ui->refererEdit->text();
+
+	QString folder = getFolderFromURL(this, url);
+
+	if (!folder.isEmpty())
+	{
+		printInfo(tr("Detected folder '%1' in referer %2").arg(folder).arg(url));
+
+		m_ui->subfolderEdit->setText(folder);
+	}
+	else
+	{
+		printWarning(tr("Unable to detect a folder in referer %1").arg(url));
 	}
 }
 

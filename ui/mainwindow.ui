@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>673</width>
-    <height>690</height>
+    <width>472</width>
+    <height>675</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -52,7 +52,7 @@
        <item>
         <layout class="QHBoxLayout" name="stepsHorizontalLayout">
          <item>
-          <widget class="QLabel" name="label_2">
+          <widget class="QLabel" name="firstLabel">
            <property name="text">
             <string>First</string>
            </property>
@@ -69,7 +69,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="label_3">
+          <widget class="QLabel" name="lastLabel">
            <property name="text">
             <string>Last</string>
            </property>
@@ -89,7 +89,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="label_4">
+          <widget class="QLabel" name="stepLabel">
            <property name="text">
             <string>Step</string>
            </property>
@@ -109,20 +109,20 @@
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="detectFromURLButton">
+          <widget class="QPushButton" name="lastFromURLButton">
            <property name="text">
-            <string>Detect from URL</string>
+            <string>From URL</string>
            </property>
           </widget>
          </item>
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <layout class="QHBoxLayout" name="refererHorizontalLayout">
          <item>
-          <widget class="QLabel" name="label_6">
+          <widget class="QLabel" name="refererLabel">
            <property name="text">
-            <string>Referrer</string>
+            <string>Referer</string>
            </property>
           </widget>
          </item>
@@ -134,7 +134,7 @@
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_5">
          <item>
-          <widget class="QLabel" name="label_7">
+          <widget class="QLabel" name="userAgentLabel">
            <property name="text">
             <string>User-agent</string>
            </property>
@@ -153,15 +153,15 @@
      </widget>
     </item>
     <item>
-     <widget class="QGroupBox" name="groupBox_2">
+     <widget class="QGroupBox" name="destinationGroupBox">
       <property name="title">
        <string>Destination</string>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_3">
+        <layout class="QHBoxLayout" name="folderHorizontalLayout">
          <item>
-          <widget class="QLabel" name="label_5">
+          <widget class="QLabel" name="folderLabel">
            <property name="text">
             <string>Folder</string>
            </property>
@@ -180,21 +180,32 @@
         </layout>
        </item>
        <item>
-        <widget class="QCheckBox" name="useLastDirectoryCheckBox">
-         <property name="text">
-          <string>Use last directory from URL as local directory</string>
-         </property>
-         <property name="checked">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QCheckBox" name="useBeforeLastDirectoryCheckBox">
-         <property name="text">
-          <string>Use before last directory from URL as local directory</string>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="subfolderHorizontalLayout">
+         <item>
+          <widget class="QLabel" name="subfolrderLabel">
+           <property name="text">
+            <string>Subfolder</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="subfolderEdit"/>
+         </item>
+         <item>
+          <widget class="QPushButton" name="folderFromURLButton">
+           <property name="text">
+            <string>From URL</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="folderFromRefererButton">
+           <property name="text">
+            <string>From referer</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="QCheckBox" name="replaceUnderscoresBySpacesCheckBox">
@@ -278,8 +289,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>673</width>
-     <height>21</height>
+     <width>472</width>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuAbout">
@@ -315,12 +326,11 @@
   <tabstop>firstSpinBox</tabstop>
   <tabstop>lastSpinBox</tabstop>
   <tabstop>stepSpinBox</tabstop>
-  <tabstop>detectFromURLButton</tabstop>
+  <tabstop>lastFromURLButton</tabstop>
   <tabstop>refererEdit</tabstop>
   <tabstop>userAgentEdit</tabstop>
   <tabstop>folderEdit</tabstop>
   <tabstop>browseButton</tabstop>
-  <tabstop>useLastDirectoryCheckBox</tabstop>
   <tabstop>replaceUnderscoresBySpacesCheckBox</tabstop>
   <tabstop>skipCheckBox</tabstop>
   <tabstop>stopCheckBox</tabstop>
