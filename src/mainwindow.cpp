@@ -67,22 +67,22 @@ MainWindow::MainWindow():QMainWindow(), m_button(nullptr)
 
 	// void downloadRedirected(const QString & url, const QDateTime & lastModified, const DownloadEntry & entry);
 	m_fileLabel = new QLabel(this);
-	m_fileLabel->setMinimumSize(QSize(500, 12));
-	m_ui->statusbar->addWidget(m_fileLabel);
+	m_fileLabel->setMinimumSize(500, 12);
+	m_ui->statusbar->addWidget(m_fileLabel, 1);
 
 	m_speedLabel = new QLabel(this);
-	m_speedLabel->setMaximumSize(QSize(16777215, 12));
-	m_ui->statusbar->addWidget(m_speedLabel);
+	m_speedLabel->setMaximumSize(50, 12);
+	m_ui->statusbar->addWidget(m_speedLabel, 0);
 
 	m_progressCurrent = new QProgressBar(this);
-	m_progressCurrent->setMaximumSize(QSize(16777215, 12));
+	m_progressCurrent->setMaximumSize(50, 12);
 	m_progressCurrent->setMaximum(100);
-	m_ui->statusbar->addPermanentWidget(m_progressCurrent);
+	m_ui->statusbar->addPermanentWidget(m_progressCurrent, 0);
 
 	m_progressTotal = new QProgressBar(this);
-	m_progressTotal->setMaximumSize(QSize(16777215, 12));
+	m_progressTotal->setMaximumSize(50, 12);
 	m_progressTotal->setMaximum(100);
-	m_ui->statusbar->addPermanentWidget(m_progressTotal);
+	m_ui->statusbar->addPermanentWidget(m_progressTotal, 0);
 
 	loadSettings();
 
